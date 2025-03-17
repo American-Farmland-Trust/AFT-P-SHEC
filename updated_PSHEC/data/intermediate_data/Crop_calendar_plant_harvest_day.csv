@@ -1,0 +1,251 @@
+"","state_alpha","Crop","Crop.name.in.original.data","Plant.median","Harvest.median"
+"1","AK","Barley","Barley - spring",140.5,255
+"2","CA","Barley","Barley - spring",93,250.5
+"3","CO","Barley","Barley - spring",104.5,227
+"4","ID","Barley","Barley - spring",114.5,240.5
+"5","KS","Barley","Barley - spring",90.5,176
+"6","MI","Barley","Barley - spring",123,225
+"7","MN","Barley","Barley - spring",131,237
+"8","MT","Barley","Barley - spring",124.5,243.5
+"9","NE","Barley","Barley - spring",93.5,205
+"10","NV","Barley","Barley - spring",117.5,224.5
+"11","ND","Barley","Barley - spring",128.5,230
+"12","OR","Barley","Barley - spring",7,215
+"13","SD","Barley","Barley - spring",118,212.5
+"14","UT","Barley","Barley - spring",104.5,220
+"15","WA","Barley","Barley - spring",100,227
+"16","WI","Barley","Barley - spring",115,220
+"17","WY","Barley","Barley - spring",111,237
+"18","AZ","Barley","Barley - winter",355.5,158.5
+"19","CA","Barley","Barley - winter",6.5,181
+"20","DE","Barley","Barley - winter",292,170
+"21","KS","Barley","Barley - winter",281.5,178.5
+"22","KY","Barley","Barley - winter",280.5,164
+"23","MD","Barley","Barley - winter",285.5,176
+"24","NV","Barley","Barley - winter",270.5,214
+"25","NJ","Barley","Barley - winter",275.5,161.5
+"26","NC","Barley","Barley - winter",301.5,175.5
+"27","OK","Barley","Barley - winter",290,174
+"28","PA","Barley","Barley - winter",267.5,196.5
+"29","SC","Barley","Barley - winter",314.5,172
+"30","TX","Barley","Barley - winter",294,161
+"31","VA","Barley","Barley - winter",291,173
+"32","AL","Maize","Corn",101,254
+"33","AZ","Maize","Corn",113,289.5
+"34","AR","Maize","Corn",119,256
+"35","CA","Maize","Corn",135,289.5
+"36","CO","Maize","Corn",128.5,304.5
+"37","DE","Maize","Corn",128.5,281
+"38","FL","Maize","Corn",87.5,235
+"39","GA","Maize","Corn",92.5,244.5
+"40","ID","Maize","Corn",135.5,300
+"41","IL","Maize","Corn",130,295
+"42","IN","Maize","Corn",138,303.5
+"43","IA","Maize","Corn",133,290.5
+"44","KS","Maize","Corn",122.5,281
+"45","KY","Maize","Corn",130.5,285
+"46","LA","Maize","Corn",93.5,234.5
+"47","MD","Maize","Corn",134,286.5
+"48","MI","Maize","Corn",136,306.5
+"49","MN","Maize","Corn",136.5,302
+"50","MS","Maize","Corn",124,259.5
+"51","MO","Maize","Corn",128,289.5
+"52","MT","Maize","Corn",134,273
+"53","NE","Maize","Corn",131.5,299.5
+"54","NJ","Maize","Corn",153,303
+"55","NM","Maize","Corn",122.5,296
+"56","NY","Maize","Corn",135.5,309
+"57","NC","Maize","Corn",115.5,271.5
+"58","ND","Maize","Corn",139.5,292.5
+"59","OH","Maize","Corn",137.5,298.5
+"60","OK","Maize","Corn",109.5,265
+"61","OR","Maize","Corn",138,316
+"62","PA","Maize","Corn",143,306
+"63","SC","Maize","Corn",102,244.5
+"64","SD","Maize","Corn",141.5,300.5
+"65","TN","Maize","Corn",123.5,279
+"66","TX","Maize","Corn",97,251
+"67","UT","Maize","Corn",130.5,306
+"68","VA","Maize","Corn",125.5,280.5
+"69","WA","Maize","Corn",130.5,306.5
+"70","WV","Maize","Corn",140.5,291
+"71","WI","Maize","Corn",138,304
+"72","WY","Maize","Corn",136.5,303
+"73","AL","Cotton","Cotton",129.5,307
+"74","AZ","Cotton","Cotton",104.5,308.5
+"75","AR","Cotton","Cotton",132.5,296.5
+"76","CA","Cotton","Cotton",113,296.5
+"77","FL","Cotton","Cotton",128.5,296.5
+"78","GA","Cotton","Cotton",133,306
+"79","LA","Cotton","Cotton",130,287.5
+"80","MS","Cotton","Cotton",132,289.5
+"81","MO","Cotton","Cotton",133.5,293.5
+"82","NM","Cotton","Cotton",120,318.5
+"83","NC","Cotton","Cotton",135,309.5
+"84","OK","Cotton","Cotton",153,316.5
+"85","SC","Cotton","Cotton",133,302.5
+"86","TN","Cotton","Cotton",135.5,296
+"87","TX","Cotton","Cotton",125,292
+"88","VA","Cotton","Cotton",120,308.5
+"89","AK","Oats","Oats - spring",140.5,263.5
+"90","CA","Oats","Oats - spring",100.5,250.5
+"91","CO","Oats","Oats - spring",109.5,232
+"92","ID","Oats","Oats - spring",121.5,237
+"93","IL","Oats","Oats - spring",106,209
+"94","IN","Oats","Oats - spring",110.5,206.5
+"95","IA","Oats","Oats - spring",110,202.5
+"96","KS","Oats","Oats - spring",78,206.5
+"97","ME","Oats","Oats - spring",143.5,252.5
+"98","MI","Oats","Oats - spring",123,225
+"99","MN","Oats","Oats - spring",123,229
+"100","MO","Oats","Oats - spring",90,192
+"101","MT","Oats","Oats - spring",127,243.5
+"102","NE","Oats","Oats - spring",106,204.5
+"103","NY","Oats","Oats - spring",113,233
+"104","ND","Oats","Oats - spring",130,233.5
+"105","OH","Oats","Oats - spring",118.5,215.5
+"106","OR","Oats","Oats - spring",364,217.5
+"107","PA","Oats","Oats - spring",125,221.5
+"108","SD","Oats","Oats - spring",117.5,211.5
+"109","UT","Oats","Oats - spring",115.5,239.5
+"110","WA","Oats","Oats - spring",87,224.5
+"111","WV","Oats","Oats - spring",121.5,213
+"112","WI","Oats","Oats - spring",118,224.5
+"113","WY","Oats","Oats - spring",119.5,239.5
+"114","AR","Oats","Oats - winter",302.5,172.5
+"115","CA","Oats","Oats - winter",348.5,205
+"116","GA","Oats","Oats - winter",303.5,158
+"117","NC","Oats","Oats - winter",301,174.5
+"118","OK","Oats","Oats - winter",294.5,175
+"119","SC","Oats","Oats - winter",307.5,164.5
+"120","TX","Oats","Oats - winter",304,172
+"121","AL","Groundnuts","Peanuts",131.5,276
+"122","FL","Groundnuts","Peanuts",113,273
+"123","GA","Groundnuts","Peanuts",133,276.5
+"124","NM","Groundnuts","Peanuts",141,294
+"125","NC","Groundnuts","Peanuts",135.5,292.5
+"126","OK","Groundnuts","Peanuts",153.5,302
+"127","SC","Groundnuts","Peanuts",133,282.5
+"128","TX","Groundnuts","Peanuts",163,302
+"129","VA","Groundnuts","Peanuts",127.5,283.5
+"130","AL","Sorghum","Sorghum",136.5,296.5
+"131","AR","Sorghum","Sorghum",128,266.5
+"132","CO","Sorghum","Sorghum",156,298.5
+"133","GA","Sorghum","Sorghum",145.5,280.5
+"134","IL","Sorghum","Sorghum",160.5,295.5
+"135","KS","Sorghum","Sorghum",158,296
+"136","KY","Sorghum","Sorghum",156,293.5
+"137","LA","Sorghum","Sorghum",132,253.5
+"138","MS","Sorghum","Sorghum",133,261.5
+"139","MO","Sorghum","Sorghum",148.5,291
+"140","NE","Sorghum","Sorghum",150.5,291.5
+"141","NM","Sorghum","Sorghum",156,318.5
+"142","NC","Sorghum","Sorghum",160,278
+"143","OK","Sorghum","Sorghum",153,302
+"144","SC","Sorghum","Sorghum",160.5,275
+"145","SD","Sorghum","Sorghum",158.5,292.5
+"146","TN","Sorghum","Sorghum",140.5,274.5
+"147","TX","Sorghum","Sorghum",124,258
+"148","AL","Soybeans","Soybeans",152,306.5
+"149","AR","Soybeans","Soybeans",156,300.5
+"150","DE","Soybeans","Soybeans",165,303.5
+"151","FL","Soybeans","Soybeans",151.5,301.5
+"152","GA","Soybeans","Soybeans",155.5,311.5
+"153","IL","Soybeans","Soybeans",146.5,286.5
+"154","IN","Soybeans","Soybeans",148,288.5
+"155","IA","Soybeans","Soybeans",146,282
+"156","KS","Soybeans","Soybeans",158,291
+"157","KY","Soybeans","Soybeans",158,298
+"158","LA","Soybeans","Soybeans",155.5,291
+"159","MD","Soybeans","Soybeans",164,306.5
+"160","MI","Soybeans","Soybeans",147,292
+"161","MN","Soybeans","Soybeans",150,285.5
+"162","MS","Soybeans","Soybeans",141,282
+"163","MO","Soybeans","Soybeans",158,298.5
+"164","NE","Soybeans","Soybeans",148.5,281
+"165","NJ","Soybeans","Soybeans",172.5,304
+"166","NC","Soybeans","Soybeans",160,318.5
+"167","ND","Soybeans","Soybeans",144.5,277
+"168","OH","Soybeans","Soybeans",149.5,289
+"169","OK","Soybeans","Soybeans",150,301.5
+"170","PA","Soybeans","Soybeans",158,306
+"171","SC","Soybeans","Soybeans",161,328.5
+"172","SD","Soybeans","Soybeans",153.5,286.5
+"173","TN","Soybeans","Soybeans",160.5,308.5
+"174","TX","Soybeans","Soybeans",151.5,281
+"175","VA","Soybeans","Soybeans",155.5,311
+"176","WI","Soybeans","Soybeans",153,294
+"177","CA","Sugarbeets","Sugarbeets",265,159
+"178","CO","Sugarbeets","Sugarbeets",104.5,296
+"179","ID","Sugarbeets","Sugarbeets",104,286
+"180","MI","Sugarbeets","Sugarbeets",124,294
+"181","MN","Sugarbeets","Sugarbeets",131,280.5
+"182","MT","Sugarbeets","Sugarbeets",117.5,286.5
+"183","NE","Sugarbeets","Sugarbeets",108,293.5
+"184","NM","Sugarbeets","Sugarbeets",104.5,306.5
+"185","ND","Sugarbeets","Sugarbeets",124,277
+"186","OH","Sugarbeets","Sugarbeets",127.5,296
+"187","OR","Sugarbeets","Sugarbeets",81.5,288.5
+"188","TX","Sugarbeets","Sugarbeets",106.5,317
+"189","WA","Sugarbeets","Sugarbeets",85.5,284.5
+"190","WY","Sugarbeets","Sugarbeets",112,285
+"191","CO","Wheat","Wheat - spring",114.5,242
+"192","ID","Wheat","Wheat - spring",113,244
+"193","MN","Wheat","Wheat - spring",128.5,242.5
+"194","MT","Wheat","Wheat - spring",123.5,244.5
+"195","NV","Wheat","Wheat - spring",117.5,224.5
+"196","ND","Wheat","Wheat - spring",128,236.5
+"197","OR","Wheat","Wheat - spring",82.5,235.5
+"198","SD","Wheat","Wheat - spring",115,219
+"199","UT","Wheat","Wheat - spring",100,222
+"200","WA","Wheat","Wheat - spring",97.5,229.5
+"201","WI","Wheat","Wheat - spring",115,225
+"202","WY","Wheat","Wheat - spring",120,240.5
+"203","AL","Wheat","Wheat - winter",310.5,151.5
+"204","AZ","Wheat","Wheat - winter",355.5,158.5
+"205","AR","Wheat","Wheat - winter",303.5,172.5
+"206","CA","Wheat","Wheat - winter",349.5,182.5
+"207","CO","Wheat","Wheat - winter",260,199
+"208","DE","Wheat","Wheat - winter",303,185.5
+"209","FL","Wheat","Wheat - winter",318.5,143.5
+"210","GA","Wheat","Wheat - winter",313.5,160.5
+"211","ID","Wheat","Wheat - winter",279,230.5
+"212","IL","Wheat","Wheat - winter",291,187
+"213","IN","Wheat","Wheat - winter",288.5,188.5
+"214","IA","Wheat","Wheat - winter",276,197
+"215","KS","Wheat","Wheat - winter",275.5,186
+"216","KY","Wheat","Wheat - winter",295,177
+"217","LA","Wheat","Wheat - winter",313.5,154
+"218","MD","Wheat","Wheat - winter",300.5,187
+"219","MI","Wheat","Wheat - winter",279,205.5
+"220","MN","Wheat","Wheat - winter",256.5,223.5
+"221","MS","Wheat","Wheat - winter",305.5,168
+"222","MO","Wheat","Wheat - winter",293.5,183.5
+"223","MT","Wheat","Wheat - winter",273,230
+"224","NE","Wheat","Wheat - winter",260.5,198.5
+"225","NV","Wheat","Wheat - winter",270.5,216.5
+"226","NJ","Wheat","Wheat - winter",287.5,204
+"227","NM","Wheat","Wheat - winter",262.5,181
+"228","NY","Wheat","Wheat - winter",279,206.5
+"229","NC","Wheat","Wheat - winter",308.5,177.5
+"230","ND","Wheat","Wheat - winter",261.5,202
+"231","OH","Wheat","Wheat - winter",286.5,199
+"232","OK","Wheat","Wheat - winter",276,171
+"233","OR","Wheat","Wheat - winter",286,220
+"234","PA","Wheat","Wheat - winter",272.5,204
+"235","SC","Wheat","Wheat - winter",326.5,164
+"236","SD","Wheat","Wheat - winter",262,205.5
+"237","TN","Wheat","Wheat - winter",301,176
+"238","TX","Wheat","Wheat - winter",290,166.5
+"239","UT","Wheat","Wheat - winter",262.5,214
+"240","VA","Wheat","Wheat - winter",301,181
+"241","WA","Wheat","Wheat - winter",273.5,222
+"242","WV","Wheat","Wheat - winter",293.5,199
+"243","WI","Wheat","Wheat - winter",263,214
+"244","WY","Wheat","Wheat - winter",255,220
+"245","KY","Tobacco","Tobacco_NASS",150,246
+"246","NC","Tobacco","Tobacco_NASS",154,264
+"247","TN","Tobacco","Tobacco_NASS",156,248
+"248","KS","Cotton","Cotton_NASS",149,315
+"249","NY","Soybeans","Soybeans_NASS",146,292
+"250","WV","Soybeans","Soybeans_NASS",151,306

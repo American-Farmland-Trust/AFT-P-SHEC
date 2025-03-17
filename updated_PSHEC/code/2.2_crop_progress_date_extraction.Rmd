@@ -1,0 +1,320 @@
+---
+title: "crop_progress"
+author: "ML"
+date: "2025-01-16"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# setup
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(rnassqs)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(reshape2)
+library(caret)
+library(parallel)
+library(readr)
+api_key <- as.character(read.csv("nass_key.csv", header = F)[1,1])       # api key
+
+# Call in all corn yield data via NASS API ####
+
+nassqs_auth(key = api_key)
+
+```
+
+# Pull data from NASS 
+
+1. Specify years and pull crop progress data from nass 'SURVEY'
+
+Results: A few states are missing the mature dates, but have harvest dates for barley and oats
+
+For barley: When mature data is not available, use >= 25% harvest date to substitute mature dates
+Barley states: "CA" "CO" "ID" "MN" "MT" "OR" "UT" "VA" "WA"
+
+For oats: When mature data is not available, use >= 25% harvest date to substitute mature dates
+Oats states: "IA" "IL" "MN" "MT" "NY" "OH" "OR" "TX" "WI"
+
+For corn: When mature data is not available, use >= 7.5% harvest date for mature dates
+Corn states: 'MT'
+
+```{r data}
+# Specify the range of years across which you want to collect data
+years <- as.list(2000:2023)  
+
+## Crop Progress 
+
+# group I: 'CORN','WHEAT','SORGHUM',"BARLEY","OATS"
+# group II (need script adjustment): 'COTTON',"TOBACCO",'SOYBEANS' "SUGARBEETS","PEANUTS"
+
+# group I: can be extracted by plant and mature  
+group1 <- plyr::ldply(years, function(x){
+  
+  params <- list(
+    commodity_desc =
+      c('CORN','SORGHUM',"BARLEY","OATS"),
+    year = x,
+    agg_level_desc = "STATE", 
+    source_desc = "SURVEY",  # change source to source_desc
+    #domain_desc = "TOTAL",
+    statisticcat_desc = 'PROGRESS',
+    unit_desc = c("PCT PLANTED", "PCT MATURE","PCT HARVESTED") # this description might be different for different crops
+  )
+  
+  return(
+    nassqs(params) %>%
+        dplyr::select(
+        commodity_desc,
+        unit_desc,
+        short_desc,
+        year,
+        state_alpha,
+        state_ansi,
+        begin_code,
+        reference_period_desc,
+        week_ending,
+        Value
+      ) %>%
+      rename(crop_progress_pct = Value)
+  )
+}) %>%
+  filter(
+      # For Corn-related records
+        (grepl("CORN - PROGRESS, MEASURED IN PCT PLANTED", short_desc) | 
+          grepl("CORN - PROGRESS, MEASURED IN PCT MATURE", short_desc) |
+          (grepl("CORN, GRAIN - PROGRESS, MEASURED IN PCT HARVESTED", short_desc) & state_alpha == "MT" )) |
+          
+       # For barley
+         (grepl("BARLEY - PROGRESS, MEASURED IN PCT PLANTED", short_desc) | 
+          grepl("BARLEY - PROGRESS, MEASURED IN PCT MATURE", short_desc) |
+          (grepl("BARLEY - PROGRESS, MEASURED IN PCT HARVESTED", short_desc) & 
+             state_alpha %in% c("CA", "CO", "ID", "MN", "MT", "OR", "UT", "VA", "WA"))) |
+        
+       # For oats
+         (grepl("OATS - PROGRESS, MEASURED IN PCT PLANTED", short_desc) | 
+          grepl("OATS - PROGRESS, MEASURED IN PCT MATURE", short_desc) |
+          (grepl("OATS - PROGRESS, MEASURED IN PCT HARVESTED", short_desc) & 
+             state_alpha %in% c("IA", "IL", "MN", "MT", "NY", "OH", "OR", "TX", "WI"))) |
+        
+       # For sorghum
+        (grepl("SORGHUM - PROGRESS, MEASURED IN PCT PLANTED", short_desc) | 
+          grepl("SORGHUM - PROGRESS, MEASURED IN PCT MATURE", short_desc))
+        
+  )
+
+# group II: have different definitions of plant and mature  
+group2 <- plyr::ldply(years, function(x){
+  
+  params <- list(
+    commodity_desc =
+      c('COTTON','SOYBEANS','WHEAT',"TOBACCO", "SUGARBEETS","PEANUTS"),
+    year = x,
+    agg_level_desc = "STATE", 
+    source_desc = "SURVEY",  # change source to source_desc
+    #domain_desc = "TOTAL",
+    statisticcat_desc = 'PROGRESS',
+    unit_desc = c("PCT PLANTED", "PCT TRANSPLANTED",'PCT DROPPING LEAVES', "PCT HARVESTED", "PCT BOLLS OPENING") # this description might be different for different crops
+  )
+  
+  return(
+    nassqs(params) %>%
+        dplyr::select(
+        commodity_desc,
+        unit_desc,
+        short_desc,
+        year,
+        state_alpha,
+        state_ansi,
+        begin_code,
+        reference_period_desc,
+        week_ending,
+        Value
+      ) %>%
+      rename(crop_progress_pct = Value) %>%
+      # Filter the data
+      filter(
+      # For Soybeans-related records
+        ((grepl("SOYBEANS - PROGRESS, MEASURED IN PCT PLANTED", short_desc) | 
+          grepl("SOYBEANS - PROGRESS, MEASURED IN PCT DROPPING LEAVES", short_desc)) & 
+          grepl("SOYBEANS", commodity_desc)) |
+      
+      # For Cotton-related records
+        ((grepl("COTTON, UPLAND - PROGRESS, MEASURED IN PCT PLANTED", short_desc) | 
+          grepl("COTTON, UPLAND - PROGRESS, MEASURED IN PCT BOLLS OPENING", short_desc)) & 
+          grepl("COTTON", commodity_desc)) |
+      
+      # For Tobacco-related records
+        ((grepl("TOBACCO, AIR-CURED LIGHT BURLEY \\(TYPE 31\\) - PROGRESS, MEASURED IN PCT TRANSPLANTED|TOBACCO, AIR-CURED LIGHT BURLEY \\(TYPE 31\\) - PROGRESS, MEASURED IN PCT HARVESTED", short_desc) & 
+           state_alpha == "NC") |
+          
+        (grepl("TOBACCO - PROGRESS, MEASURED IN PCT TRANSPLANTED|TOBACCO - PROGRESS, MEASURED IN PCT HARVESTED", short_desc) & 
+             state_alpha %in% c("KY", "TN"))) |
+        
+      # For Sugarbeets
+          grepl("SUGARBEETS", commodity_desc) |
+        
+      # For Peanuts
+          grepl('PEANUTS', commodity_desc) |
+        
+      # For Winter Wheat: Filter rows where the 'short_desc' column contains "WHEAT, WINTER"
+          grepl("WHEAT, WINTER", short_desc) & grepl("WHEAT", commodity_desc)
+      )
+  )
+})
+
+```
+
+2. Extract the week starting date of at least 50% planted or matured 
+
+Note from the missing results: 
+
+Results: A few states are missing the mature dates, but have harvest dates for barley and oats
+
+For barley: When mature data is not available, use >= 25% harvest date to substitute mature dates
+Barley states: "CA" "CO" "ID" "MN" "MT" "OR" "UT" "VA" "WA"
+
+For oats: When mature data is not available, use >= 25% harvest date to substitute mature dates
+Oats states: "IA" "IL" "MN" "MT" "NY" "OH" "OR" "TX" "WI"
+
+For corn: When mature data is not available, use >= 7.5% harvest date for mature dates
+Corn states: 'MT'
+
+```{r median_date}
+#1) calculate the starting date of the week (week starts on Monday)
+library(lubridate)
+
+# combine two datasets
+crop <- rbind.data.frame(group1,group2)
+
+# convert character to date
+crop$week_ending <- as.Date(crop$week_ending)
+
+corn_prog <- crop %>%
+  mutate(week_start = floor_date(week_ending, unit = 'week', week_start = 1)) %>%
+  group_by(commodity_desc,year,state_alpha,unit_desc) %>%
+  filter( 
+   # If BARLEY..., keep rows with crop_progress_pct >= 25
+    (short_desc == "BARLEY - PROGRESS, MEASURED IN PCT HARVESTED" & 
+       (crop_progress_pct >= 25 & crop_progress_pct < 100)) |
+   # If OATS..., keep rows with crop_progress_pct >= 25
+    (short_desc == "OATS - PROGRESS, MEASURED IN PCT HARVESTED" & 
+       (crop_progress_pct >= 25 & crop_progress_pct < 100)) | 
+   # If CORN..., keep rows with crop_progress_pct >= 7.5
+    (short_desc == "CORN, GRAIN - PROGRESS, MEASURED IN PCT HARVESTED" & 
+       (crop_progress_pct >= 7.5 & crop_progress_pct < 100)) |
+   # For everything else, keep rows with crop_progress_pct >= 50
+    (!short_desc %in% c("BARLEY - PROGRESS, MEASURED IN PCT HARVESTED",
+                         "OATS - PROGRESS, MEASURED IN PCT HARVESTED",
+                         "CORN, GRAIN - PROGRESS, MEASURED IN PCT HARVESTED") &
+       (crop_progress_pct >= 50 & crop_progress_pct < 100)) 
+  ) %>%
+  slice_min(week_start) %>%
+  ungroup() %>%
+  mutate(yday = yday(week_start)) %>%
+  select(commodity_desc,year, state_alpha,unit_desc,begin_code,yday,week_start,crop_progress_pct)
+
+```
+
+3. Check for missing values
+
+```{r missing}
+# add week start
+#corn_prog$week_start <- as.Date(corn_prog$week_start)
+
+corn_prog_wide <- corn_prog %>% 
+  select(-c(begin_code,crop_progress_pct,week_start)) %>%
+  
+  #  Replace all values in a column to "PCT Planted" and "PCT MATURE" 
+  mutate(
+    unit_desc = case_when(
+      unit_desc %in% c("PCT PLANTED", "PCT TRANSPLANTED") ~ "planted",
+      TRUE ~ "mature")
+  ) %>%
+  pivot_wider(names_from = unit_desc, values_from = yday) 
+
+# read the county list
+crop_counties <- read.csv(file = 'data/nass_processed_yield/all_10_crops_county_list_2000_2023.csv')
+# Ensure the 'GEOID' column is a string with 5 characters, left-padded with zeros
+crop_counties$GEOID <- formatC(crop_counties$GEOID, width = 5, format = 'd' ,flag = '0')
+
+crop_counties_long <- crop_counties %>%
+  pivot_longer(names_to = 'crop', values_to = 'value', cols = c(BARLEY:WHEAT)) %>%
+  filter(value == 1) %>%
+  dplyr::select(-c(GEOID, value)) %>%
+  unique()
+
+# filter crop and states that have yield data
+corn_prog_filter <- crop_counties_long %>%
+  left_join(corn_prog_wide, by = c('state_alpha', 'crop' = 'commodity_desc'))
+
+test <- corn_prog_filter %>% 
+  group_by(crop,state_alpha) %>%
+  summarise(across(everything(), ~ sum(!is.na(.)), .names = 'non_na_{col}')) %>%
+  mutate(non_na = case_when(
+    non_na_planted == 0 | non_na_mature == 0 ~ 0,
+    TRUE ~ 1
+  ))
+
+test %>% filter(non_na == 0)
+
+# A tibble: 4 × 6
+# Groups:   crop [3]
+#  crop       state_alpha non_na_year non_na_mature non_na_planted non_na
+#  <chr>      <chr>             <int>         <int>          <int>  <dbl>
+#1 BARLEY     CA                    0             0              0      0
+#2 CORN       CA                    0             0              0      0
+#3 SUGARBEETS CA                    0             0              0      0
+#4 SUGARBEETS NE                    0             0              0      0
+
+```
+
+
+4. calculate the state average across years
+
+```{r average}
+state_avg <- corn_prog_filter %>%
+  group_by(crop,state_alpha) %>%
+  summarise(planted = mean(planted, na.rm = TRUE),
+            mature = mean(mature, na.rm = TRUE)) %>%
+  as.data.frame()
+
+#corn_growing_length <- state_avg %>%
+#  filter(crop == 'CORN') %>%
+#  mutate(length = mature - planted) %>%
+#  summarise(mean_length = mean(length, na.rm = TRUE)) 
+#130.4486
+
+#sugarbeets_growing_length <- state_avg %>%
+#  filter(crop == 'SUGARBEETS') %>%
+#  mutate(length = mature - planted) %>%
+#  summarise(mean_length = mean(length, na.rm = TRUE)) 
+#172.375
+
+# there are 4 rows with no data at all,
+# try to consult the crop caldenar data
+  
+  # For CA barley,the only barley county in CA is 06079 (San Luis Obispo)
+  # use winter barley planted date from the crop calendar data 
+  # farmers usually harvest 2-3 weeks or more after maturity
+  # so use the harvest date from the crop calendar data minus 21 days
+state_avg[2, c('planted','mature')] <- c(6.5, 181 - 21)
+ # For CA corn: use planted date from the crop calendar data
+state_avg[17, c('planted','mature')] <- c(135,135+130.4)
+# For CA sugarbeets: use planted date from the crop calendar data
+state_avg[130, c('planted','mature')] <- c(265,(172.4 - (365-265)))
+# For NE sugarbeets: use planted date from the crop calendar data
+state_avg[137, c('planted','mature')] <- c(108,108+172.4)
+  
+```
+
+5. Save the crop progress data
+
+```{r save}
+
+saveRDS(state_avg, file = 'data/intermediate_data/Crop_progress_plant_mature.rds')
+
+```

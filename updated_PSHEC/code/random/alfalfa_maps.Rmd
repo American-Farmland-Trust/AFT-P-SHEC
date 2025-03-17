@@ -1,0 +1,281 @@
+---
+title: "alfalfa_coverage"
+author: "ML"
+date: "2025-02-18"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Load all libraries 
+library(rnassqs)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(reshape2)
+library(caret)
+library(parallel)
+library(readr)
+library(purrr)
+```
+
+# read other crops counties
+
+```{r crops}
+crops <- read.csv(file = 'data/nass_processed_yield/all_10_crops_county_list_2000_2023.csv')
+# Ensure the 'GEOID' column is a string with 5 characters, left-padded with zeros
+crops$GEOID <- formatC(crops$GEOID, width = 5, format = 'd' ,flag = '0')
+
+```
+
+# alfalfa data
+
+```{r alfalfa}
+# read NASS api key
+api_key <- as.character(read.csv("nass_key.csv", header = F)[1,1])      
+#api_key <- as.character(read.csv("nass_key.csv", header = F)[1,1])      
+
+# Call in all yield data via NASS API ####
+nassqs_auth(key = api_key)
+
+# Pull data from NASS
+
+# Specify years and pull yield data from nass 'SURVEY'
+survey_years <- as.list(2000:2023)  
+
+# Specify years and pull yield data from nass 'CENSUS'
+census.years <- as.list(c(2002,2007,2012, 2017,2022))
+
+# Specify the parameters to pull
+params.name <- c("source_desc",           "sector_desc",           "group_desc",           
+                 "commodity_desc",        "class_desc",            "prodn_practice_desc",  
+                 "util_practice_desc",    "statisticcat_desc",     "unit_desc",            
+                 "short_desc",            "domain_desc",           "domaincat_desc")
+
+# ----- pull Survey data for all crops -----#
+d <- plyr::ldply(survey_years, function(x){
+  
+  params <- list(
+    year = x,
+    agg_level_desc = "COUNTY", 
+    source_desc = "SURVEY",  
+    domain_desc = "TOTAL"
+  )
+  
+  return(
+    nassqs_yields(params) 
+  )
+}) 
+
+# ----------- Hay: alfalfa -----------#
+
+d.hay <- d %>%
+  filter(commodity_desc == "HAY" & 
+           util_practice_desc == "ALL UTILIZATION PRACTICES" &
+           year %in% survey_years &
+           agg_level_desc == "COUNTY" & 
+           source_desc == "SURVEY" &  
+           domain_desc == "TOTAL" &
+           #short_desc == "WHEAT, WINTER - YIELD, MEASURED IN BU / ACRE" &
+           prodn_practice_desc == "ALL PRODUCTION PRACTICES" &
+           county_ansi != "") %>%
+  mutate(
+    GEOID = paste(state_ansi, county_ansi, sep = ""),
+    Yield_mg_ha = as.numeric(Value) * 0.0628
+  ) %>%
+  filter(short_desc == "HAY, ALFALFA - YIELD, MEASURED IN TONS / ACRE") %>%
+  #filter(short_desc == "HAY, (EXCL ALFALFA) - YIELD, MEASURED IN TONS / ACRE") %>%
+  #filter(short_desc == "HAY - YIELD, MEASURED IN TONS / ACRE")
+  mutate(crop = 'ALFALFA') %>%
+  dplyr::select(
+    year,
+    crop,
+    GEOID,
+    state_alpha,
+    state_ansi,
+    county_ansi,
+    county_name,
+    Yield_mg_ha, 
+    short_desc) %>%
+  group_by(GEOID) %>%
+  add_count(GEOID) %>%
+  filter(n >= 15) %>% # Filter to >=15 corn yield observations
+  ungroup(.) %>%
+  select(-n) 
+
+# extract total and irrigation acres for the crop
+d.acres.total.alfalfa <- plyr::ldply(census.years, function(x) {
+  
+  params <- list(
+    commodity_desc = 'HAY',
+    class_desc = "ALFALFA",
+    util_practice_desc = "ALL UTILIZATION PRACTICES",
+    source_desc = "CENSUS",
+    year = x,
+    agg_level_desc = "COUNTY",
+    domain_desc = "TOTAL"
+  )
+  
+  return(
+    nassqs(params) %>%
+      filter(county_ansi != "") %>%
+      filter(short_desc %in% c("HAY, ALFALFA - ACRES HARVESTED",
+                               "HAY, ALFALFA, IRRIGATED - ACRES HARVESTED")) %>%
+      mutate(GEOID = paste(state_ansi, county_ansi, sep = "")) %>%
+      select(
+        year,
+        GEOID,
+        state_alpha,
+        state_ansi,
+        county_ansi,
+        county_name,
+        Value,
+        short_desc
+      )
+  )
+  
+})
+
+# percentage of irrigated acres in each county 
+d.acres.alfalfa <- d.acres.total.alfalfa %>%
+  pivot_wider(
+    names_from = short_desc,
+    values_from = Value
+  ) %>%
+  # filter counties that contain yield data
+  filter(GEOID %in% d.hay$GEOID,!is.na(`HAY, ALFALFA - ACRES HARVESTED`)) %>%
+  # replace NA with zero
+  replace_na(list(`HAY, ALFALFA, IRRIGATED - ACRES HARVESTED` = 0)) %>%
+  mutate(Percent_irrigated = `HAY, ALFALFA, IRRIGATED - ACRES HARVESTED`/`HAY, ALFALFA - ACRES HARVESTED`) %>%
+  group_by(GEOID) %>%
+  summarize(
+    Mean.percent.irrigated = mean(Percent_irrigated),
+    SD.percent.irrigated = sd(Percent_irrigated)
+  ) %>%
+  mutate(irrigated = case_when(
+    Mean.percent.irrigated <= 0.05 ~ 'rainfed',
+    TRUE ~ 'irrigated'))
+
+rm(d.acres.total.tobacco) # remove intermediate dataset
+
+# combine yield and irrigation data
+d.alfalfa <- d.hay %>%
+  left_join(d.acres.alfalfa, by = 'GEOID')
+
+# Extract unique GEOID values
+alfalfa_yield_summary <- d.alfalfa %>%
+    dplyr::select(state_alpha,GEOID) %>%
+    mutate(alfalfa = 1) %>%
+    unique()
+
+```
+
+# combine alfalfa with other crops
+
+```{r combine}
+# Transform the data into a wide format
+all_crop_county_wide <- crops %>%
+  full_join(alfalfa_yield_summary, by = c('GEOID','state_alpha')) 
+
+# replace all NA with 0
+all_crop_county_wide[is.na(all_crop_county_wide)] <- 0
+
+```
+
+# plot 
+
+```{r plot}
+
+# plot counties 
+library(ggplot2)
+library(usmap)
+library(ggpubr)
+
+# get state boundaries
+states <- us_map(regions = 'states', exclude = c('AK','HI'))
+
+# get county boundaries 
+county <- us_map(regions = 'counties', exclude = c('AK','HI'))
+
+# 10 crops data
+crop_10_map_data <- crops %>%
+  left_join(county, by = c('GEOID'='fips'))
+
+# alfalfa county data
+alfalfa_counties_map <- alfalfa_yield_summary %>%
+  left_join(county, by = c('GEOID'='fips'))
+
+# counties with only alfalfa
+only_alfalfa <- alfalfa_yield_summary$GEOID[!(alfalfa_yield_summary$GEOID %in% crops$GEOID)]
+
+only_alfalfa_map <- county %>%
+  filter(fips %in% only_alfalfa)
+
+# counties overlap with alfalfa
+crops_alfalfa_overlap <- intersect(alfalfa_yield_summary$GEOID, crops$GEOID)
+
+crops_alfalfa_overlap_map <- county %>%
+  filter(fips %in% crops_alfalfa_overlap)
+
+#create the alfalfa map
+alfalfa_map <- ggplot() +
+  geom_polygon(data = alfalfa_counties_map, aes(x =x, y=y, group = group, fill = 'Covered counties'),alpha = 0.9) +
+  geom_polygon(data = county, aes(x = x, y = y, group = group), fill = NA, color = 'gray20') +
+  geom_polygon(data = states, aes(x = x, y = y, group = group), fill = NA, color = 'black', linewidth =1) +
+  scale_fill_manual(values = 'darkorange3', name = 'Covered counties', guide = NULL) + 
+  ggtitle('Alfalfa counties') +
+  coord_equal() +
+  theme_void() +
+  theme(plot.title = element_text(size = 24, hjust = 0.5, face = 'bold'))
+
+alfalfa_map
+
+#create alfalfa only map (without overlap with other crops)
+alfalfa_only <- ggplot() +
+  geom_polygon(data = only_alfalfa_map, aes(x =x, y=y, group = group, fill = 'Covered counties'),alpha = 0.9) +
+  geom_polygon(data = county, aes(x = x, y = y, group = group), fill = NA, color = 'gray20') +
+  geom_polygon(data = states, aes(x = x, y = y, group = group), fill = NA, color = 'black', size =1) +
+  scale_fill_manual(values = 'darkorange3', name = 'Covered counties', guide = NULL) + 
+  ggtitle('Alfalfa only counties \n (no overlap with other crops)') +
+  coord_equal() +
+  theme_void() +
+  theme(plot.title = element_text(size = 24, hjust = 0.5, face = 'bold')
+        )
+
+alfalfa_only
+
+#create the alfalfa and other crops overlap counties
+overlap_map <- ggplot() +
+  geom_polygon(data = crops_alfalfa_overlap_map, aes(x =x, y=y, group = group, fill = 'Covered counties'),alpha = 0.9) +
+  geom_polygon(data = county, aes(x = x, y = y, group = group), fill = NA, color = 'gray20') +
+  geom_polygon(data = states, aes(x = x, y = y, group = group), fill = NA, color = 'black',size = 1) +
+  scale_fill_manual(values = 'darkorange3', name = 'Covered counties', guide = NULL) + 
+  labs(title = 'Alfalfa counties \n (overlap with other crops)') +
+  coord_equal() +
+  theme_void() +
+  theme(plot.title = element_text(size = 24, face = 'bold', hjust = 0.5)
+        #legend.title = element_blank(),
+        #legend.position = 'bottom',
+        #legend.text = element_text(size = 14)
+        )
+
+overlap_map
+
+combined_plot <- ggarrange(csw_rainfed_map,no_hay, all_map,  nrow = 1, legend = 'none') #%>%
+  #gridExtra::grid.arrange(get_legend(all), heights = unit(c(80, 2), "mm"))
+
+annotate_figure(combined_plot, 
+                #top = text_grob("Aspirational Coverage Map for P-SHEC Counties", 
+                #color = "black", face = "bold", size = 24, vjust = 4),
+                
+                bottom = text_grob("Figure 1. Current and anticipated coverage maps for P-SHEC covered counties. \n Left: Current coverage by P-SHEC, including counties growing rainfed corn, soybean, and winter wheat.\n Middle: Anticipated P-SHEC coverage, including counties using irrigated corn, soybean, and winter wheat, \nplus cotton, sorghum, barley, tobacco, oats, peanuts, beans, sugar beets, and sunflowers (irrigated or not). \n Right: Similar to the Middle Panel, including counties growing hay (irrigated or not).", color = "black",
+                                  hjust = 0.5, vjust = -0,  size = 18) # face = "italic",
+               
+               )
+
+#
+
+```

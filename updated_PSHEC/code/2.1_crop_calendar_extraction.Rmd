@@ -1,0 +1,362 @@
+---
+title: "crop_calendar_extraction"
+output: html_document
+date: "2024-01-17"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(tidyverse)
+
+```
+
+# read crop calendar data
+data was downloaded from: https://sage.nelson.wisc.edu/data-and-models/datasets/crop-calendar-dataset/
+
+all data 
+
+```{r calendar}
+raw <- read.csv(file = 'data/raw_data/Crop_calendar_data_with_climate.csv', row.names = 'X.1')
+
+```
+
+Crop data for US states was extracted by: 
+1) Nation code: 5
+2) Crop.name.in.orignial.data:
+
+#'CORN','SOYBEANS','WHEAT','COTTON','SORGHUM',"BARLEY","OATS","PEANUTS",
+# "SUGARBEETS"
+# Tobacco is not included in this file
+
+```{r filter}
+
+crop_day <- raw %>%
+  filter(Nation.code == 5) %>% # filter by nation
+  filter(Crop %in% c("Barley", "Maize", "Cotton", "Oats", "Sorghum", "Soybeans","Groundnuts",
+                     "Sugarbeets", "Wheat")) %>% # filter by crop name
+  #filter(Crop.name.in.original.data != "Wheat - spring")
+  mutate(state_alpha = datasets::state.abb[match(Location,state.name)]) %>%
+  dplyr::select(state_alpha,Crop, Crop.name.in.original.data,
+                Plant.median, Harvest.median)
+
+```
+
+# TOBACCO was not included in the crop calendar data
+1. extract crop progress data from NASS survey 
+
+```{r tobacco}
+library(rnassqs)
+api_key <- as.character(read.csv("nass_key.csv", header = F)[1,1])       # api key
+# Call in data via NASS API 
+nassqs_auth(key = api_key)
+# Specify the range of years across which you want to collect data
+years <- as.list(2000:2023)  
+
+tobacco <- plyr::ldply(years, function(x){
+  
+  params <- list(
+    commodity_desc = "TOBACCO",
+    year = x,
+    agg_level_desc = "STATE", 
+    source_desc = "SURVEY"  # change source to source_desc
+    #domain_desc = "TOTAL"
+    #statisticcat_desc = 'PROGRESS' # give error if specify this in tobacco
+    #unit_desc = c("PCT TRANSPLANTED","PCT HARVESTED") # give error if specify this in tobacco
+  )
+  
+  return(
+    nassqs(params) %>%
+      dplyr::select(
+        commodity_desc,
+        unit_desc,
+        short_desc,
+        year,
+        state_alpha,
+        state_ansi,
+        begin_code,
+        reference_period_desc,
+        week_ending,
+        Value
+      ) %>%
+      rename(crop_progress_pct = Value) %>%
+      filter(
+        grepl("PCT TRANSPLANTED|PCT HARVESTED", unit_desc) & 
+          grepl("TOBACCO", commodity_desc)
+      ) %>%
+      
+      # Filter based on specific state and short_desc conditions
+      # Note: only NC has specified the progress for specific type
+      filter(
+        (grepl("TOBACCO, AIR-CURED LIGHT BURLEY \\(TYPE 31\\) - PROGRESS, MEASURED IN PCT TRANSPLANTED|TOBACCO, AIR-CURED LIGHT BURLEY \\(TYPE 31\\) - PROGRESS, MEASURED IN PCT HARVESTED", short_desc) & 
+           state_alpha == "NC") |
+          
+          (grepl("TOBACCO - PROGRESS, MEASURED IN PCT TRANSPLANTED|TOBACCO - PROGRESS, MEASURED IN PCT HARVESTED", short_desc) & 
+             state_alpha %in% c("KY", "TN"))
+      )
+  )
+})
+
+
+```
+2. Extract the week starting date of at least 50% planted or matured 
+
+```{r median_date}
+#1) calculate the starting date of the week (week starts on Monday)
+library(lubridate)
+
+# convert character to date
+tobacco$week_ending <- as.Date(tobacco$week_ending)
+
+tobacco_prog <- tobacco %>%
+  mutate(week_start = floor_date(week_ending, unit = 'week', week_start = 1)) %>%
+  group_by(commodity_desc,year,state_alpha,unit_desc) %>%
+  filter(crop_progress_pct >= 50) %>%
+  slice_min(week_start) %>%
+  ungroup() %>%
+  mutate(yday = yday(week_start)) %>%
+  dplyr::select(commodity_desc,year, state_alpha,unit_desc,begin_code,yday,week_start,crop_progress_pct)
+
+tobacco_day <- tobacco_prog %>% 
+  dplyr::select(commodity_desc, year, state_alpha,unit_desc,yday) %>%
+  # get the median of the planting and harvest day
+  group_by(state_alpha,unit_desc) %>%
+  summarise(yday_median = round(median(yday))) %>%
+  pivot_wider(names_from = unit_desc,values_from = yday_median) %>%
+  mutate(Crop = 'Tobacco', Crop.name.in.original.data = 'Tobacco_NASS') %>%
+  rename(Plant.median = `PCT TRANSPLANTED`,
+         Harvest.median = `PCT HARVESTED`) %>%
+  dplyr::select(state_alpha, Crop, Crop.name.in.original.data,Plant.median,Harvest.median)
+
+crop_day_1 <- rbind.data.frame(crop_day,tobacco_day)
+
+#write.csv(crop_day_1, file = 'data/intermediate_data/Crop_calendar_plant_harvest_day.csv')
+
+```
+
+# read yield county list
+```{r data}
+
+# crop yield county list
+crop_county <- read.csv(file = 'data/nass_processed_yield/all_10_crops_county_list_2000_2023.csv')
+# if read from excel file, the GEOID may be read as integer; convert to characters 
+crop_county$GEOID <- formatC(crop_county$GEOID, width = 5, format = 'd' ,flag = '0')
+
+```
+
+# check if there is any missing crop calenar each state
+# if data is missing, using NASS crop progress data to fill the gap
+
+```{r crop}
+
+crop_calendar <- crop_day_1 %>%
+  mutate(Crop = case_when(
+    Crop == 'Maize' ~ 'Corn',
+    Crop == 'Groundnuts' ~ 'Peanuts',
+    .default = Crop
+  ))
+
+library(stringr)
+check_calendar <- crop_county %>%
+  pivot_longer(names_to = 'crop', values_to = 'value', cols = c(BARLEY:WHEAT)) %>%
+  filter(value == 1) %>%
+  group_by(state_alpha, crop) %>%
+  summarise(value = unique(value)) %>%
+  mutate(crop = str_to_title(crop)) %>%
+  left_join(crop_calendar, by = c('state_alpha', 'crop' = 'Crop'))
+  
+missing_data <- check_calendar %>%
+  filter(is.na(Crop.name.in.original.data))
+
+missing_data
+#
+#  state_alpha crop     value Crop.name.in.original.data Plant.median Harvest.median
+#  <chr>       <chr>    <int> <chr>                             <dbl>          <dbl>
+#1 KS          Cotton       1 NA                                   NA             NA
+#2 NY          Soybeans     1 NA                                   NA             NA
+#3 WV          Soybeans     1 NA                                   NA             NA
+
+```
+
+For the three states and crops with missing crop calendar data
+Use NASS crop progress data to fill the gap
+
+KS cotton
+```{r missing}
+library(rnassqs)
+api_key <- as.character(read.csv("nass_key.csv", header = F)[1,1])       # api key
+# Call in data via NASS API 
+nassqs_auth(key = api_key)
+# Specify the range of years across which you want to collect data
+years <- as.list(2000:2023)  
+
+KS_cotton <- plyr::ldply(years, function(x){
+  
+  params <- list(
+    commodity_desc = "COTTON",
+    year = x,
+    agg_level_desc = "STATE", 
+    source_desc = "SURVEY",  # change source to source_desc
+    #domain_desc = "TOTAL"
+    #state_alpha = 'KS',
+    statisticcat_desc = 'PROGRESS' # give error if specify this in tobacco
+    #unit_desc = c("PCT TRANSPLANTED","PCT HARVESTED") # give error if specify this in tobacco
+  )
+  
+  return(
+    nassqs(params) %>%
+#  )
+#})      
+      
+      dplyr::select(
+        commodity_desc,
+        unit_desc,
+        short_desc,
+        year,
+        state_alpha,
+        state_ansi,
+        begin_code,
+        reference_period_desc,
+        week_ending,
+        Value
+      ) %>%
+  filter(state_alpha == 'KS') %>%
+  rename(crop_progress_pct = Value) %>%
+  filter(
+    grepl("PCT PLANTED|PCT HARVESTED", unit_desc)
+  ) #%>%
+)
+})
+
+# Extract the week starting date of at least 50% planted or matured 
+
+# convert character to date
+KS_cotton$week_ending <- as.Date(KS_cotton$week_ending)
+
+KS_cotton_prog <- KS_cotton %>%
+  mutate(week_start = floor_date(week_ending, unit = 'week', week_start = 1)) %>%
+  group_by(commodity_desc,year,state_alpha,unit_desc) %>%
+  filter(crop_progress_pct >= 50) %>%
+  slice_min(week_start) %>%
+  ungroup() %>%
+  mutate(yday = yday(week_start)) %>%
+  dplyr::select(commodity_desc,year, state_alpha,unit_desc,begin_code,yday,week_start,crop_progress_pct)
+
+KS_cotton_day <- KS_cotton_prog %>% 
+  dplyr::select(commodity_desc, year, state_alpha,unit_desc,yday) %>%
+  # get the median of the planting and harvest day
+  group_by(state_alpha,unit_desc) %>%
+  summarise(yday_median = round(median(yday))) %>%
+  pivot_wider(names_from = unit_desc,values_from = yday_median) %>%
+  mutate(Crop = 'Cotton', Crop.name.in.original.data = 'Cotton_NASS') %>%
+  rename(Plant.median = `PCT PLANTED`,
+         Harvest.median = `PCT HARVESTED`) %>%
+  dplyr::select(state_alpha, Crop, Crop.name.in.original.data,Plant.median,Harvest.median)
+
+
+```
+
+NY and WV soybeans
+```{r missing}
+
+miss_soybeans <- plyr::ldply(years, function(x){
+  
+  params <- list(
+    commodity_desc = "SOYBEANS",
+    year = x,
+    agg_level_desc = "STATE", 
+    source_desc = "SURVEY",  # change source to source_desc
+    #domain_desc = "TOTAL"
+    #state_alpha = 'KS',
+    statisticcat_desc = 'PROGRESS' # give error if specify this in tobacco
+    #unit_desc = c("PCT TRANSPLANTED","PCT HARVESTED") # give error if specify this in tobacco
+  )
+  
+  return(
+    nassqs(params) %>%
+#  )
+#})      
+      
+      dplyr::select(
+        commodity_desc,
+        unit_desc,
+        short_desc,
+        year,
+        state_alpha,
+        state_ansi,
+        begin_code,
+        reference_period_desc,
+        week_ending,
+        Value
+      ) %>%
+  filter(state_alpha %in% c('NY','WV')) %>%
+  rename(crop_progress_pct = Value) %>%
+  filter(
+    grepl("PCT PLANTED|PCT HARVESTED",
+          unit_desc)
+  ) #%>%
+)
+})
+
+# Extract the week starting date of at least 50% planted or matured 
+
+# convert character to date
+miss_soybeans$week_ending <- as.Date(miss_soybeans$week_ending)
+
+miss_soybeans_prog <- miss_soybeans %>%
+  mutate(week_start = floor_date(week_ending, unit = 'week', week_start = 1)) %>%
+  group_by(commodity_desc,year,state_alpha,unit_desc) %>%
+  filter(crop_progress_pct >= 50) %>%
+  slice_min(week_start) %>%
+  ungroup() %>%
+  mutate(yday = yday(week_start)) %>%
+  dplyr::select(commodity_desc,year, state_alpha,unit_desc,begin_code,yday,week_start,crop_progress_pct)
+
+miss_soybeans_day <- miss_soybeans_prog %>% 
+  dplyr::select(commodity_desc, year, state_alpha,unit_desc,yday) %>%
+  # get the median of the planting and harvest day
+  group_by(state_alpha,unit_desc) %>%
+  summarise(yday_median = round(median(yday))) %>%
+  pivot_wider(names_from = unit_desc,values_from = yday_median) %>%
+  mutate(Crop = 'Soybeans', Crop.name.in.original.data = 'Soybeans_NASS') %>%
+  rename(Plant.median = `PCT PLANTED`,
+         Harvest.median = `PCT HARVESTED`) %>%
+  dplyr::select(state_alpha, Crop, Crop.name.in.original.data,Plant.median,Harvest.median)
+
+
+```
+
+Combine results
+
+```{r combine}
+crop_day_2 <- rbind.data.frame(crop_day_1,KS_cotton_day,miss_soybeans_day)
+
+write.csv(crop_day_2, file = 'data/intermediate_data/Crop_calendar_plant_harvest_day.csv')
+```
+
+Not RUN !
+# convert day of the year to date: since the paper mentioned that this data is:"Our observations generally refer to planting and harvesting dates in the 1990s and early 2000s" (Sacks et al., 2010)
+
+```{r date}
+
+corn_calendar <- raw %>%
+  filter(Nation.code == 5 & Crop.name.in.original.data == 'Corn' ) %>%
+  mutate(Plant.median.date = as.Date(Plant.median, origin = '1999-12-31'),
+         Harvest.median.date = as.Date(Harvest.median, origin = '1999-12-31'),
+         state_alpha = datasets::state.abb[match(Location,state.name)]) %>%
+  dplyr::select(state_alpha, Plant.median.date, Harvest.median.date) %>%
+  mutate(Plant.median.month = month(Plant.median.date),
+         Harvest.median.month = month(Harvest.median.date)) %>%
+  mutate(Plant.median.day = day(Plant.median.date),
+         Harvest.median.day = day(Harvest.median.date)) %>%
+  mutate(Plant.median.month.day = paste0(sprintf("%02d", Plant.median.month), '-', sprintf("%02d",Plant.median.day)),
+         Harvest.median.month.day = paste0(sprintf("%02d", Harvest.median.month), '-', sprintf("%02d", Harvest.median.day))) %>%
+  select(-c(Plant.median.date,Harvest.median.date))
+
+write.csv(corn_calendar, file = 'data/AFT-data/Drought-data/Crop_calendar/corn_planting_harvest_month_day.csv')
+
+```
+
