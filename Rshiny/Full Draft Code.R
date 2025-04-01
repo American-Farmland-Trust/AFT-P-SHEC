@@ -117,20 +117,20 @@ ui <- fluidPage(
 # Define server logic
 server <- function(input, output, session) {
   #Some datasets will be replaced by 'final versions' when outside analyses have been completed
-  state_county_data <- read_excel("C:\\Users\\ChellieMaples\\OneDrive - American Farmland Trust\\Desktop\\Desktop Excel\\State_County.xlsx")
-  comet_options <- read_excel("C:\\Users\\ChellieMaples\\OneDrive - American Farmland Trust\\Desktop\\Desktop Excel\\COMET_Options.xlsx")
-  crop_prices <- read_excel("C:\\Users\\ChellieMaples\\OneDrive - American Farmland Trust\\Desktop\\Desktop Excel\\prices.xlsx")
-  equipment_data <- read_excel("C:\\Users\\ChellieMaples\\OneDrive - American Farmland Trust\\Desktop\\Desktop Excel\\Equipment.xlsx")
-  pass_data <- read_excel("C:\\Users\\ChellieMaples\\OneDrive - American Farmland Trust\\Desktop\\Desktop Excel\\Pass_Options.xlsx")
-  att_data <- read_excel("C:\\Users\\ChellieMaples\\OneDrive - American Farmland Trust\\Desktop\\Desktop Excel\\Attribution.xlsx")
-  regionalequip_data <- read_excel("C:\\Users\\ChellieMaples\\OneDrive - American Farmland Trust\\Desktop\\Regional_Equip.xlsx")
-  gssurgo_base <- read_excel("C:\\Users\\ChellieMaples\\OneDrive - American Farmland Trust\\Desktop\\Desktop Excel\\SOM_County_Base.xlsx")  
-  comet <- read_excel("C:\\Users\\ChellieMaples\\OneDrive - American Farmland Trust\\Desktop\\Desktop Excel\\COMET Planner Data_Concise.xlsx","All States Filtered")
-  comet_ghg <- read_excel("C:\\Users\\ChellieMaples\\OneDrive - American Farmland Trust\\Desktop\\Desktop Excel\\COMET Planner Data_Concise.xlsx","Emissions Reductions")
-  soybean_est<-read_excel("C:\\Users\\ChellieMaples\\OneDrive - American Farmland Trust\\Desktop\\Desktop Excel\\Soybean_Pred_Normal.xlsx")
-  corn_est<-read_excel("C:\\Users\\ChellieMaples\\OneDrive - American Farmland Trust\\Desktop\\Desktop Excel\\corn_all_yield_predictions_intervals_machine_learning_model_update_N.xlsx")
-  corn_drought<-read_excel("C:\\Users\\ChellieMaples\\OneDrive - American Farmland Trust\\Desktop\\Desktop Excel\\Drought_Example.xlsx")
-  drought_prob<-read_excel("C:\\Users\\ChellieMaples\\OneDrive - American Farmland Trust\\Desktop\\Desktop Excel\\Drought_Probabilities_Example.xlsx")
+  state_county_data <- read_excel("State_County.xlsx")
+  comet_options <- read_excel("COMET_Options.xlsx")
+  crop_prices <- read_excel("Prices.xlsx")
+  equipment_data <- read_excel("Equipment.xlsx")
+  pass_data <- read_excel("Pass_Options.xlsx")
+  att_data <- read_excel("Attribution.xlsx")
+  regionalequip_data <- read_excel("Regional_Equip.xlsx")
+  gssurgo_base <- read_excel("SOM_County_Base.xlsx")  
+  comet <- read_excel("COMET Planner Data_Concise.xlsx","All States Filtered")
+  comet_ghg <- read_excel("COMET Planner Data_Concise.xlsx","Emissions Reductions")
+  soybean_est<-read_excel("Soybean_Pred_Normal.xlsx")
+  corn_est<-read_excel("corn_all_yield_predictions_intervals_machine_learning_model_update_N.xlsx")
+  corn_drought<-read_excel("Drought_Example.xlsx")
+  drought_prob<-read_excel("Drought_Probabilities_Example.xlsx")
   
   
   # Reactive values for the tables
