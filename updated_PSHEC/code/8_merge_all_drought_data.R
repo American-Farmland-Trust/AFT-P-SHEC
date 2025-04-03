@@ -53,7 +53,7 @@ data_function <- function(crop_name, LAR_threshold) {
     drought_LCR.1 <- drought_LCR.1[-out_ind_LCR,]
   } else {drought_LCR.1}  
   
-  saveRDS(drought_LCR.1, file = paste0('data/merged_drought_data/',LAR_threshold,'_LAR/',crop_name,'_LAR_',LAR_threshold,'_DSCI_400_merged_drought_data.rds'))
+  saveRDS(drought_LCR.1, file = paste0('data/merged_drought_data/LAR_',LAR_threshold,'/',crop_name,'_LAR_',LAR_threshold,'_DSCI_400_merged_drought_data.rds'))
   
   rm(sob_col,DSCI,yield,merged,drought_LCR)
   
