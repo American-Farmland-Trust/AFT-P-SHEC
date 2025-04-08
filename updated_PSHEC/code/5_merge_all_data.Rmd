@@ -185,7 +185,7 @@ all_crop_county_wide_order <- all_crop_county_wide %>%
   # Order by crop_sum (lowest to highest)
   arrange(desc(crop_sum))
 
-write.csv(all_crop_county_wide_order, file = paste0(folder_path,'/all_10_crops_merged_data_county_list_ordered_2000_2023.csv'),
+write.csv(all_crop_county_wide_order, file = 'data/intermediate/all_10_crops_merged_data_county_list_ordered_2000_2023.csv',
           row.names = FALSE)
 
 
