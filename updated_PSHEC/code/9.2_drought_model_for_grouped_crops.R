@@ -563,7 +563,7 @@ group_function <- function(LAR_name, ...) {
     
     all_predictions <- all_predictions_test %>%
       group_by(type) %>%
-      metrics(Yield_decomp_add, .pred) %>%
+      metrics(Yield_change, .pred) %>%
       dplyr::select(type,.metric,.estimate) %>%
       rename(metric = .metric, estimate = .estimate) %>%
       unite("type",type:metric, sep = '_') #%>%
@@ -581,8 +581,8 @@ group_function <- function(LAR_name, ...) {
 
 # Define the groups as a list
 groups_list <- list(
-  #c("BARLEY", "OATS","PEANUTS"),
-  #c("BARLEY", "OATS", "PEANUTS", "SUGARBEETS", "TOBACCO"),
+  c("BARLEY", "OATS","PEANUTS"),
+  c("BARLEY", "OATS", "PEANUTS", "SUGARBEETS", "TOBACCO"),
   c("CORN","COTTON","BARLEY","SORGHUM","WHEAT","SOYBEANS","PEANUTS","OATS"),
   c("CORN","COTTON","BARLEY","SORGHUM","WHEAT","SOYBEANS","PEANUTS","OATS","SUGARBEETS","TOBACCO")
 )
