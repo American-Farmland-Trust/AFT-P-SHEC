@@ -28,4 +28,4 @@ model_results <- lapply(file_list, combine_rmse)
 
 combine_results <- bind_rows(model_results) %>% unique()
 
-write.csv(combine_results, file = paste0(input_dir,'combined_drought_model_selection_metrics.csv'), row.names = FALSE)
+write.csv(combine_results, file = 'data/intermediate_data/combined_drought_model_selection_metrics.csv', row.names = FALSE)
