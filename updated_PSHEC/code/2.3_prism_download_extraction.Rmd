@@ -1,0 +1,210 @@
+---
+title: "PRISM_download_extraction"
+author: "ML"
+date: "2024-09-09"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+This script is to download 1) PRISM data (4km resolution); 2) aggregate at the county level. This is modified from: https://www.toddrjones.com/blog/2021-09-22-weighting-and-aggregating-weather-data/
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(prism) # to download PRSIM data
+library(raster)
+library(tidyverse)
+library(tigris)
+library(future)
+library(furrr)
+library(exactextractr)
+```
+
+# set prism file directory and download daily climate data (take a few hours each) 1999-2023
+Data to extract: ppt (precipitation), tmean (mean temp), tmin (min temp), tmax (max temp), 
+
+```{r dir}
+# download tmax
+prism_set_dl_dir("data/prism_raw/tmax")
+
+# set date, can update to add extra files 
+get_prism_dailys(type = "tmax", minDate = "1999-01-01",
+                 maxDate = "2023-12-31", keepZip=FALSE) # zip files were not saved
+
+# download tmin
+prism_set_dl_dir("data/prism_raw/tmin") # reset directory
+
+get_prism_dailys(type = "tmin", minDate = "1999-01-01",
+                 maxDate = "2023-12-31", keepZip=FALSE)
+
+# download tmean
+prism_set_dl_dir("data/prism_raw/tmean")
+
+get_prism_dailys(type = "tmean", minDate = "1999-01-01",
+                 maxDate = "2023-12-31", keepZip=FALSE)
+
+
+# download ppt
+prism_set_dl_dir("data/prism_raw/ppt")
+
+get_prism_dailys(type = "ppt", minDate = "1999-01-01",
+                 maxDate = "2023-12-31", keepZip=FALSE)
+
+
+```
+
+# create the file_list for each variable 
+
+```{r list}
+# re-direct to the focused folder
+prism_set_dl_dir("data/prism_raw/tmax")
+file_list_tmax <- prism_archive_ls() %>%
+  # Convert the character vector to a data frame
+  as.data.frame() %>%   
+  # Rename the first column to 'file'
+  rename(file = 1) %>%  
+  # Extract the date from the file name (last 12 characters, excluding the extension)
+  mutate(date = substr(file, nchar(file) -11, nchar(file)-4),
+         # Create a new column 'stable' indicating if the file name contains the keyword 'stable'
+         stable = str_detect(file, 'stable'),
+         # Extract the type of data (e.g., variable type like 'tmax') from the file name using regex
+         type = str_extract(file, "(?<=_)[a-z]*(?=_)"))
+
+head(file_list_tmax)
+
+# re-direct to the focused folder
+prism_set_dl_dir("data/prism_raw/ppt")
+file_list_ppt <- prism_archive_ls() %>%
+  # Convert the character vector to a data frame
+  as.data.frame() %>%   
+  # Rename the first column to 'file'
+  rename(file = 1) %>%  
+  # Extract the date from the file name (last 12 characters, excluding the extension)
+  mutate(date = substr(file, nchar(file) -11, nchar(file)-4),
+         # Create a new column 'stable' indicating if the file name contains the keyword 'stable'
+         stable = str_detect(file, 'stable'),
+         # Extract the type of data (e.g., variable type like 'tmax') from the file name using regex
+         type = str_extract(file, "(?<=_)[a-z]*(?=_)"))
+
+head(file_list_ppt)
+
+# re-direct to the focused folder
+prism_set_dl_dir("data/prism_raw/tmin")
+file_list_tmin <- prism_archive_ls() %>%
+  # Convert the character vector to a data frame
+  as.data.frame() %>%   
+  # Rename the first column to 'file'
+  rename(file = 1) %>%  
+  # Extract the date from the file name (last 12 characters, excluding the extension)
+  mutate(date = substr(file, nchar(file) -11, nchar(file)-4),
+         # Create a new column 'stable' indicating if the file name contains the keyword 'stable'
+         stable = str_detect(file, 'stable'),
+         # Extract the type of data (e.g., variable type like 'tmax') from the file name using regex
+         type = str_extract(file, "(?<=_)[a-z]*(?=_)"))
+
+head(file_list_tmin)
+
+# re-direct to the focused folder
+prism_set_dl_dir("data/prism_raw/tmean")
+file_list_tmean <- prism_archive_ls() %>%
+  # Convert the character vector to a data frame
+  as.data.frame() %>%   
+  # Rename the first column to 'file'
+  rename(file = 1) %>%  
+  # Extract the date from the file name (last 12 characters, excluding the extension)
+  mutate(date = substr(file, nchar(file) -11, nchar(file)-4),
+         # Create a new column 'stable' indicating if the file name contains the keyword 'stable'
+         stable = str_detect(file, 'stable'),
+         # Extract the type of data (e.g., variable type like 'tmax') from the file name using regex
+         type = str_extract(file, "(?<=_)[a-z]*(?=_)"))
+
+head(file_list_tmean)
+```
+
+# get a shapefile for counties 
+
+```{r county}
+counties <- tigris::counties(cb = TRUE, resolution = "20m") %>%
+    filter(!STATE_NAME %in% c("Alaska", "Hawaii", "Puerto Rico"))
+
+```
+
+# now create a function to aggregate daily weather data to county levels 
+
+```{r weather}
+daily_weather <- function(file, date, type, stable) {
+  #get the weather raster variable based on the file name
+    # note here that you may need to adjust your working directory so that it points
+    # to the correct place
+    weather_raster = raster(paste0("data/prism_raw/", type, "/", file, "/", file, ".bil"))
+    #crop the weather raster based on the counties shapefile
+    weather_crop = crop(weather_raster, counties)
+    #we will work on the new variable called data
+    data <- counties
+    #aggregate to counties without weighting (weighting can be done by importing a raster with a variable e.g., population)
+    data$county_mean <- exact_extract(weather_crop, data, fun = "mean")
+    #create columns from the date and type variables
+    #data$date <- date
+    #data[[paste0(type, "_stable")]] <- stable
+    #select relevant columns from the data frame
+    data <- data.frame(data) %>% 
+      dplyr::select(GEOID, STUSPS, NAME, county_mean) #geometry,
+    
+    return(data)
+}
+
+
+```
+
+# We will then apply the above daily_weather function to each row of file_list to extract data and save to csv
+
+```{r data}
+# Set up a parallel plan (e.g., use 4 cores, adjust according to your system)
+#plan(multisession, workers = 4)
+# Apply the daily_weather function in parallel to each row of the dataframe
+#file_list2_tmax <- test %>% 
+#                mutate(weather=future_pmap(list(file, date, type, stable),
+#                                           ~ daily_weather(file = as.character(..1), 
+#                                                    date = as.character(..2),  # or keep it as a Date type
+#                                                    type = as.character(..3), 
+#                                                    stable = as.logical(..4)))) %>%
+#                                        as_tibble
+# Once done, you can revert to sequential processing using
+#plan(sequential)
+
+# if the parallel step does not work, use a simpler non-parallel approach (2-3 hours for each variable)
+
+file_lists <- list(ppt = file_list_ppt, tmax = file_list_tmax, tmean = file_list_tmean, tmin = file_list_tmin)
+
+# Define the output directory
+output_dir <- 'data/prism_daily_county_mean_1999-2023/'
+
+# Ensure the directory exists before the loop starts
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
+}
+
+# Loop through the weather types
+for (i in c('ppt','tmax','tmean','tmin')) {
+  
+  result <- file_lists[[i]] %>%
+  rowwise() %>%
+  mutate(weather = list(daily_weather(file = file, 
+                                           date = date, 
+                                           type = type, 
+                                           stable = stable))) %>%
+  unnest(weather) %>% 
+  dplyr::select(-file)
+  
+  # Construct the full file path for output
+  output_file <- paste0(output_dir, i, '_prism_daily_county_mean_1999-2023.rds')
+  
+  # Write to the file
+  saveRDS(result, file = output_file)
+  
+  # Run garbage collection to free memory
+  gc()
+}
+
+```

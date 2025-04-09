@@ -1,0 +1,567 @@
+---
+title: "prism_growing_season_extraction_mean_for_all_crops"
+author: "ML"
+date: "2025-01-31"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(purrr)
+library(dplyr)
+library(stringr)
+```
+
+# read crop calendar data and yield county list
+```{r data}
+
+# crop calendar data
+crop_calendar <- read.csv(file = 'data/intermediate_data/Crop_calendar_plant_harvest_day.csv', row.names = 'X')
+
+# rename Maize to corn and Groundnuts to peanuts
+crop_calendar <- crop_calendar %>%
+  mutate(Crop = case_when(
+    Crop == 'Maize' ~ 'Corn',
+    Crop == 'Groundnuts' ~ 'Peanuts',
+    TRUE ~ Crop
+  )) %>%
+  mutate(Crop = str_to_upper(Crop)) # convert crop name to upper case type
+
+# crop yield county list
+crop_county <- read.csv(file = 'data/nass_processed_yield/all_10_crops_county_list_2000_2023.csv')
+# if read from excel file, the GEOID may be read as integer; convert to characters 
+crop_county$GEOID <- formatC(crop_county$GEOID, width = 5, format = 'd' ,flag = '0')
+
+```
+
+# check if crop calenar is unique for each state
+Because crops like barley and oats have winter and spring for one state
+
+```{r crop}
+library(stringr)
+check_calendar <- crop_county %>%
+  pivot_longer(names_to = 'crop', values_to = 'value', cols = c(BARLEY:WHEAT)) %>%
+  filter(value == 1) %>%
+  group_by(state_alpha, crop) %>%
+  summarise(value = unique(value)) %>%
+  mutate(crop = str_to_title(crop)) %>% # convert crop name to title type
+  left_join(crop_calendar, by = c('state_alpha', 'crop' = 'Crop')) %>% 
+  filter(Crop.name.in.original.data != "Wheat - spring") %>%# filter out spring wheat 
+  group_by(state_alpha, crop) %>%
+  summarise(n = sum(value))
+
+# only CA contains both winter and spring Barley
+# checked the crop_county file, the only barley county in CA is 06079 (San Luis Obispo)
+# searched the internet: https://www.slocounty.ca.gov/departments/agriculture-weights-and-measures/department-news/2021-annual-crop-statistics-released
+# "Although prices were high for both grain hay and barley, 
+# yields fell significantly since those crops are dependent on winter rainfall and not supplemental irrigation."
+# Therefor, Barley should be a winter crop in this county. So filter out the CA Barley-spring option
+```
+
+# update calendar data based on the check results 
+
+```{r update}
+crop_calendar_1 <- crop_county %>%
+  pivot_longer(names_to = 'crop', values_to = 'value', cols = c(BARLEY:WHEAT)) %>%
+  filter(value == 1) %>%
+  left_join(crop_calendar, by = c('state_alpha', 'crop' = 'Crop')) %>% 
+  filter(Crop.name.in.original.data != "Wheat - spring") %>%
+  filter(!(Crop.name.in.original.data == 'Barley - spring' & state_alpha == 'CA')) %>%
+  select(-value)
+
+```
+
+# check crop growing season
+
+```{r season}
+
+check_season <- crop_county %>%
+  pivot_longer(names_to = 'crop', values_to = 'value', cols = c(BARLEY:WHEAT)) %>%
+  filter(value == 1) %>%
+  group_by(state_alpha, crop) %>%
+  summarise(value = unique(value)) %>%
+  mutate(crop = str_to_title(crop)) %>% # convert crop name to title type
+  left_join(crop_calendar, by = c('state_alpha', 'crop' = 'Crop')) %>% 
+  filter(Crop.name.in.original.data != "Wheat - spring") %>%# filter out spring wheat 
+  filter(!(Crop.name.in.original.data == 'Barley - spring' & state_alpha == 'CA')) %>%
+  mutate(season = case_when(Plant.median > Harvest.median ~ 'winter',
+                            Plant.median < Harvest.median ~ 'spring',
+                            TRUE ~ 'other')) %>%
+  mutate(season_length = case_when(
+    Plant.median > Harvest.median ~ (365-Plant.median) + Harvest.median,
+    Plant.median < Harvest.median ~ Harvest.median - Plant.median,
+                            TRUE ~ NA_real_))
+
+```
+
+# calculate cumulative precipitation during the growing season (plant-harvest using the crop calendar data)
+
+1. Same-Year Planting and Harvesting: When the planting median (Plant.median) is less than the harvest median (Harvest.median), we sum the county_mean values between these two dates within the same year.
+
+2. Cross-Year Planting and Harvesting: When planting occurs in the previous year (Plant.median > Harvest.median), we:
+
+Sum county_mean values from the planting date to the end of the previous year.
+
+Sum county_mean values from the start of the current year to the harvest date.
+
+3. Calculate the total ppt for each year, and then get the yearly mean for the 2000-2023 period
+
+```{r ppt}
+#library(lubridate)
+# cumulative ppt
+ppt <- readRDS(file = 'data/prism_daily_county_mean_1999-2023/ppt_prism_daily_county_mean_1999-2023.rds')
+names(ppt)
+
+# convert date to Date format
+ppt$date <- as.Date(as.character(ppt$date), format = '%Y%m%d')
+
+ppt <- ppt %>% rename(state_alpha = STUSPS) 
+
+# if read from excel file, the GEOID may be read as integer; convert to characters 
+#ppt$GEOID <- formatC(ppt$GEOID, width = 5, format = 'd' ,flag = '0')
+
+# get the year and day of the year for each date
+ppt$year <- lubridate::year(ppt$date)
+ppt$yday <- lubridate::yday(ppt$date)
+
+# Define function to compute cumulative precipitation for a single crop
+calc_cum_ppt <- function(crop_name) {
+  
+  # Filter crop calendar for the current crop and relevant columns
+  calendar = crop_calendar_1 %>%
+    filter(crop == crop_name) %>%
+    distinct(state_alpha,Plant.median,Harvest.median)
+    
+  # Join with precipitation data for the relevant GEOIDs and years
+  cum_ppt = ppt %>%
+    inner_join(calendar, by = 'state_alpha') %>% 
+    # filter by crop counties
+    filter(GEOID %in% crop_county$GEOID[crop_county[[crop_name]]==1])
+  
+  # Case 1: Plant and harvest occur within the same year
+  same_year_sum <- cum_ppt %>%
+    group_by(GEOID,state_alpha, year) %>%
+    filter(Plant.median <= Harvest.median & year > 1999) %>%
+    summarise(
+      total_sum = sum(
+        county_mean[yday >= Plant.median & yday <= Harvest.median],
+        na.rm = TRUE
+      ),
+      .groups = "drop"
+    )
+  
+  # Case 2: Plant occurs in previous year, harvest in current year
+  cross_year <- cum_ppt %>%
+    select(-c(date,stable,type,NAME)) %>%
+    group_by(GEOID,state_alpha, year) %>%
+    filter(Plant.median > Harvest.median)
+    # Join with previous year's data for the same GEOID and crop
+  
+  cross_year_sum <- cross_year %>%
+    # Calculate contributions from previous and current years
+    group_by(GEOID, state_alpha, year) %>%
+    summarise(
+      prev_sum = sum(
+        county_mean[yday >= Plant.median],  # From planting to end of prev year
+        na.rm = TRUE
+      ),
+      current_sum = sum(
+        county_mean[yday <= Harvest.median],  # From start to harvest in current year
+        na.rm = TRUE
+      )
+    ) %>%
+    group_by(GEOID, state_alpha) %>%
+    arrange(year) %>% # Ensure data is ordered by year within each group
+    mutate(
+      total_sum = lag(prev_sum, default = 0) + current_sum  # Previous year's prev_sum + current_sum
+    ) %>%
+    ungroup() %>%
+    dplyr::select(-c(prev_sum,current_sum)) %>%
+    filter(year != 1999) # don't include 1999
+  
+  # Combine results and add crop identifier
+  bind_rows(same_year_sum, cross_year_sum) %>%
+    group_by(state_alpha, GEOID) %>% 
+    mutate(cum_ppt_mean = mean(total_sum)) %>% # calculate the yearly mean for each GEOID
+    mutate(crop = crop_name) %>%
+    rename(annual_cum_ppt = total_sum)
+  
+}
+
+# process all crops
+
+all_crops <- unique(crop_calendar_1$crop)
+final_result <- lapply(all_crops, calc_cum_ppt) %>% bind_rows()
+
+saveRDS(final_result, file = 'data/weather_results/crop_county_mean_cumulative_ppt_2000_2023.rds')
+
+#final_result <- readRDS(file = 'data/weather_results/crop_county_mean_cumulative_ppt_2000_2023.rds')
+
+# check data distribution by states
+#ggplot(final_result, aes(x = cum_ppt_mean)) +
+#    geom_histogram(
+#        aes(y = after_stat(density)), 
+#        binwidth = 10,  # Adjust based on your data range
+#        fill = "steelblue", 
+#        color = "black"
+#    ) +
+#    facet_wrap(~state_alpha, scales = "free_y")
+
+# check data distribution by crops
+#ggplot(final_result, aes(x = cum_ppt_mean)) +
+#    geom_histogram(
+#        aes(y = after_stat(density)), 
+#        binwidth = 10,  # Adjust based on your data range
+#        fill = "steelblue", 
+#        color = "black"
+#    ) +
+#    facet_wrap(~crop, scales = "free_y")
+
+```
+
+# calculate mean tmax, tmin, tmean during the growing season (plant-harvest using the crop calendar data)
+
+```{r mean}
+
+# loop through three temp types and calculate means
+
+type <- c('tmax','tmin','tmean')
+
+for (i in type) {
+  
+ t <- readRDS(file = paste0('data/prism_daily_county_mean_1999-2023/',i,'_prism_daily_county_mean_1999-2023.rds'))
+
+# convert date to Date format
+ t$date <- as.Date(as.character(t$date), format = '%Y%m%d')
+
+ # if read from CSV file, make sure the GEOID is converted to a charactor
+ #t$GEOID <- formatC(t$GEOID, width = 5, format = 'd' ,flag = '0')
+
+ # get the year and day of the year for each date
+ 
+ t <- t %>%
+   rename(state_alpha = STUSPS) %>%
+   mutate(year = lubridate::year(date),
+          yday = lubridate::yday(date)
+    )
+
+ # Define temperature calculation function
+  calc_temp <- function(crop_name) {
+  
+  # Filter crop calendar for the current crop and relevant columns
+    calendar = crop_calendar_1 %>%
+      filter(crop == crop_name) %>%
+      distinct(state_alpha,Plant.median,Harvest.median)
+    
+  # Join with precipitation data for the relevant GEOIDs and years
+    mean_t = t %>%
+      inner_join(calendar, by = 'state_alpha') %>% 
+      # filter by crop counties
+      filter(GEOID %in% crop_county$GEOID[crop_county[[crop_name]]==1])
+  
+  # Case 1: Plant and harvest occur within the same year
+  same_year_mean <- mean_t %>%
+    group_by(GEOID,state_alpha, year) %>%
+    filter(Plant.median <= Harvest.median & year > 1999) %>% # don't include 1999
+    summarise(
+      year_mean = mean(
+        county_mean[yday >= Plant.median & yday <= Harvest.median],
+        na.rm = TRUE
+      ),
+      .groups = "drop"
+    )
+  
+  # Case 2: Plant occurs in previous year, harvest in current year
+  cross_year <- mean_t %>%
+    select(-c(date,stable,type,NAME)) %>%
+    group_by(GEOID,state_alpha, year) %>%
+    filter(Plant.median > Harvest.median)
+    # Join with previous year's data for the same GEOID and crop
+  
+  cross_year_mean <- cross_year %>%
+    # Calculate contributions from previous and current years
+    group_by(GEOID, state_alpha, year) %>%
+    summarise(
+      prev_sum = sum(
+        county_mean[yday >= Plant.median],  # From planting to end of prev year
+        na.rm = TRUE
+      ),
+      
+      prev_n = sum(yday >= Plant.median, na.rm = TRUE), # calculate the number of days 
+      
+      current_sum = sum(
+        county_mean[yday <= Harvest.median],  # From start of the year to harvest in current year
+        na.rm = TRUE
+      ),
+      
+      current_n = sum(yday <= Harvest.median, na.rm = TRUE) # calculate the number of days
+      
+    ) %>%
+    
+    group_by(GEOID, state_alpha) %>%
+    arrange(year) %>% # Ensure data is ordered by year within each group
+    mutate(
+      # For each year, add the previous year's sum/count (using lag)
+      total_sum = lag(prev_sum, default = 0) + current_sum,  # Previous year's prev_sum + current_sum
+      total_n = lag(prev_n, default = 0) + current_n, # total number of days
+      year_mean = total_sum/total_n
+    ) %>%
+    ungroup() %>%
+    dplyr::select(-c(prev_sum,current_sum, prev_n, current_n,total_sum, total_n)) %>%
+    filter(year != 1999) # don't include 1999
+  
+  # Combine results and add crop identifier
+  test <- bind_rows(same_year_mean, cross_year_mean) %>%
+    group_by(state_alpha, GEOID) %>% 
+    # calculate mean and name dynamically based on the type
+    mutate(!!paste0('mean_',i) := mean(year_mean)) %>% 
+    mutate(crop = crop_name) %>%
+    rename(!!paste0('annual_',i) := year_mean)
+  
+  }
+
+  # process all crops
+  all_crops <- unique(crop_calendar_1$crop)
+  final_result <- lapply(all_crops, calc_temp) %>% bind_rows()
+
+  saveRDS(final_result, file = paste0('data/weather_results/crop_county_mean_', i, '_2000_2023.rds'))
+
+}
+
+# check the data distribution 
+#tmax <- readRDS('data/weather_results/crop_county_mean_tmax_2000_2023.rds')
+#tmin <- readRDS('data/weather_results/crop_county_mean_tmin_2000_2023.rds')
+# check data distribution by states
+#ggplot(tmin, aes(x = mean_tmin)) +
+#    geom_histogram(
+#        aes(y = after_stat(density)), 
+#        binwidth = 10,  # Adjust based on your data range
+#        fill = "steelblue", 
+#        color = "black"
+#    ) +
+#    facet_wrap(~state_alpha, scales = "free_y")
+
+# check data distribution by crops
+#ggplot(tmin, aes(x = mean_tmin)) +
+#    geom_histogram(
+#        aes(y = after_stat(density)), 
+#        binwidth = 10,  # Adjust based on your data range
+#        fill = "steelblue", 
+#        color = "black"
+#    ) +
+#    facet_wrap(~crop, scales = "free_y")
+
+#cor.test(tmax$mean_tmax,final_result$mean_tmean) # 0.98
+#cor.test(tmin$mean_tmin,final_result$mean_tmean) # 0.99
+
+# Note: mean_tmean is highly correlated with mean_tmax, and mean_tmin
+# Use tmean in the model should be good.
+
+```
+
+# calculate GDD: using the (plant-mature) crop progress data
+Different crop have different thresholds: 
+Corn, soybeans, and wheat (Schillerberg et al., 2023 https://doi.org/10.1016/j.agrformet.2023.109620)
+Cotton: (Viator et al., 2005 https://acsess.onlinelibrary.wiley.com/doi/10.2134/agronj2005.0494)
+Barley, oats:
+Peanut: (Oakes et al., 2020 https://doi.org/10.3146/PS20-16.1)
+Sugerbeets: (Bradley et al., 2017 DOI:  10.5274/jsbr.54.1.60)
+
+Corn:         t_base 10; t_upper = 30 C 
+Soybeans:     t_base 10; t_upper = 30 C
+Sorghum:      t_base 10; t_upper = 30 C
+Sugerbeets:   t_base 10; t_upper = 30 C
+winter wheat: t_base 0 ; t_upper = 30 C
+Barley:       t_base 0 ; t_upper = 30 C 
+Oats:         t_base 0 ; t_upper = 30 C
+Cotton:       t_base 15.5; t_upper = 30 C
+Peanut:       t_base 13; t_upper = 30 C
+Tobacco:      t_base 10; t_upper = 32.2 C
+
+
+```{r gdd}
+library(stringr)
+
+# read crop progress data
+crop_progress <- readRDS(file = 'data/Crop_progress_plant_mature.rds')
+
+#crop_progress$crop <- str_to_title(crop_progress$crop)
+
+# read GDD temperature threshold
+gdd_temp <- read.csv(file = 'data/GDD_temperature_threshold.csv')
+
+# read tmax and tmin
+tmax <- readRDS(file = 'data/prism_daily_county_mean_1999-2023/tmax_prism_daily_county_mean_1999-2023.rds')
+tmax <- tmax %>% 
+  select(date,GEOID,STUSPS,county_mean) %>%
+  rename(tmax = county_mean)
+
+tmin <- readRDS(file = 'data/prism_daily_county_mean_1999-2023/tmin_prism_daily_county_mean_1999-2023.rds')
+tmin <- tmin %>% 
+  select(date,GEOID,STUSPS,county_mean) %>%
+  rename(tmin = county_mean)
+
+#tmean <- readRDS(file = 'data/prism_daily_county_mean_1999-2023/tmean_prism_daily_county_mean_1999-2023.rds')
+#tmin <- tmin %>% 
+#  select(date,GEOID,STUSPS,county_mean) %>%
+#  rename(tmin = county_mean)
+
+tmax_tmin <- tmax %>%
+  inner_join(tmin, by = c('date', 'GEOID','STUSPS')) %>%
+  rename(state_alpha = STUSPS)
+
+tmax_tmin$date <- as.Date(as.character(tmax_tmin$date), format = '%Y%m%d')
+#tmax_tmin$GEOID <- formatC(tmax_tmin$GEOID, width = 5, format = 'd' ,flag = '0')
+
+tmax_tmin <- tmax_tmin %>%
+   mutate(year = lubridate::year(date),
+          yday = lubridate::yday(date)
+    )
+
+# Calculate GDD 
+# if t_base = 10, t_upper = 30
+
+#1) GDD = 0, if tmax > tmin > 30 
+#2) GDD = (30 + tmin)/2 - 10, if tmax > 30 > tmin > 10
+#3) GDD = (tmax + tmin)2 - 10 , if 30 > tmax > tmin > 10
+#4) GDD = (tmax + 10)/2 - 10, if 30 > tmax > 10 > tmin
+#5) GDD = 0, if 10 > tmax
+#6) GDD = (30+10)/2 - 10, if tmax > 30 > 10 > tmin
+
+calc_gdd <- function(crop_name,t_base,t_upper) {
+  
+  # Filter crop calendar for the current crop and relevant columns
+    calendar = crop_progress %>%
+      filter(crop == crop_name) %>%
+      distinct(state_alpha,planted, mature)
+    
+  # Join with precipitation data for the relevant GEOIDs and years
+    temp = tmax_tmin %>%
+      inner_join(calendar, by = 'state_alpha') %>%
+      # filter by crop counties
+      filter(GEOID %in% crop_county$GEOID[crop_county[[crop_name]]==1])
+  
+  # Case 1: Plant and harvest occur within the same year
+  same_year_mean <- temp %>%
+    group_by(GEOID,state_alpha, year) %>%
+    filter(planted <= mature & year > 1999) %>% # don't include 1999
+    mutate(
+      GDD_day = case_when(tmax > t_upper & tmin > t_upper ~ 0,
+                      tmax > t_upper & tmin <= t_upper & tmin > t_base ~ (t_upper + tmin)/2 - t_base,
+                      tmax <= t_upper & tmax > t_base & tmin > t_base ~ (tmax + tmin)/2 - t_base,
+                      tmax <= t_upper & tmax > t_base & tmin <= t_base ~ (tmax + t_base)/2 - t_base,
+                      tmax <= t_base ~ 0,
+                      tmax > t_upper & tmin <= t_base ~ (t_upper + t_base)/2 - t_base,
+                      TRUE ~ NA_real_)
+    ) %>%
+    group_by(year, state_alpha, GEOID) %>%
+    summarise(GDD = sum(
+      GDD_day[yday >= planted & yday <= mature], 
+      na.rm = TRUE), 
+      .groups = 'drop')
+  
+  # Case 2: Plant occurs in previous year, harvest in current year
+  cross_year <- temp %>%
+    select(-date) %>%
+    group_by(GEOID,state_alpha, year) %>%
+    filter(planted > mature)
+  
+  cross_year_mean <- cross_year %>%
+    # Calculate contributions from previous and current years
+    group_by(GEOID, state_alpha, year) %>%
+    mutate(
+      GDD_day = case_when(tmax > t_upper & tmin > t_upper ~ 0,
+                      tmax > t_upper & tmin <= t_upper & tmin > t_base ~ (t_upper + tmin)/2 - t_base,
+                      tmax <= t_upper & tmax > t_base & tmin > t_base ~ (tmax + tmin)/2 - t_base,
+                      tmax <= t_upper & tmax > t_base & tmin <= t_base ~ (tmax + t_base)/2 - t_base,
+                      tmax <= t_base ~ 0,
+                      tmax > t_upper & tmin <= t_base ~ (t_upper + t_base)/2 - t_base,
+                      TRUE ~ NA_real_)
+    ) %>%
+    group_by(year, state_alpha, GEOID) %>%
+    summarise(
+      prev_sum = sum(
+        GDD_day[yday >= planted],  # From planting to end of prev year
+        na.rm = TRUE
+      ),
+      
+      current_sum = sum(
+        GDD_day[yday <= mature],  # From start of the year to harvest in current year
+        na.rm = TRUE
+      ),
+      .groups = 'drop'
+      
+    ) %>%
+    group_by(GEOID, state_alpha) %>%
+    arrange(year) %>% # Ensure data is ordered by year within each group
+    mutate(
+      # For each year, add the previous year's sum/count (using lag)
+      GDD = lag(prev_sum, default = 0) + current_sum
+    ) %>%
+    ungroup() %>%
+    dplyr::select(-c(prev_sum,current_sum)) %>%
+    filter(year != 1999) # don't include 1999
+  
+  # Combine results and add crop identifier
+  test <- bind_rows(same_year_mean, cross_year_mean) %>%
+    group_by(state_alpha, GEOID) %>% 
+    mutate(mean_GDD = mean(GDD, na.rm = TRUE)) %>% 
+    mutate(crop = crop_name) %>%
+    rename(annual_GDD = GDD)
+  
+}
+
+  # process all crops
+  final_result <- mapply(
+    FUN = calc_gdd,
+    crop_name = str_to_upper(gdd_temp$crop),
+    t_base = gdd_temp$t_base,
+    t_upper = gdd_temp$t_upper,
+    SIMPLIFY = FALSE) %>% 
+    bind_rows()
+
+  saveRDS(final_result, file = paste0('data/weather_results/crop_county_mean_GDD_2000_2023.rds'))
+
+# check data distribution by states
+#ggplot(final_result, aes(x = mean_GDD)) +
+#    geom_histogram(
+#        aes(y = after_stat(density)), 
+#        binwidth = 10,  # Adjust based on your data range
+#        fill = "steelblue", 
+#        color = "black"
+#    ) +
+#    facet_wrap(~state_alpha, scales = "free_y")
+
+# check data distribution by crops
+#ggplot(final_result, aes(x = mean_GDD)) +
+#    geom_histogram(
+#        aes(y = after_stat(density)), 
+#        binwidth = 10,  # Adjust based on your data range
+#        fill = "steelblue", 
+#        color = "black"
+#    ) +
+#    facet_wrap(~crop, scales = "free_y")
+
+
+```
+
+# combine ppt, temp, and GDD
+
+```{r combine}
+
+cum_ppt <- readRDS(file = 'data/weather_results/crop_county_mean_cumulative_ppt_2000_2023.rds')
+mean_tmean <- readRDS(file = 'data/weather_results/crop_county_mean_tmean_2000_2023.rds')
+mean_GDD <- readRDS(file = 'data/weather_results/crop_county_mean_GDD_2000_2023.rds')
+
+df_list <- list(cum_ppt, mean_tmean, mean_GDD)
+
+weather <- df_list %>%
+  reduce(left_join, by = c('state_alpha','GEOID','crop','year'))
+
+saveRDS(weather, file = 'data/intermediate_data/all_crop_county_annual_and_mean_weather_2000_2023.rds')
+
+```
