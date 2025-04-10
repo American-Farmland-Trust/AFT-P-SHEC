@@ -3,6 +3,6 @@
 .RData
 .Ruserdata
 other/
-raw_data/
+data/raw_data/
 models/
-code/random
+code/random/
