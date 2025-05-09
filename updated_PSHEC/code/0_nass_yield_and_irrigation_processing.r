@@ -61,6 +61,19 @@ d <- plyr::ldply(survey_years, function(x){
 #'CORN','SOYBEANS','WHEAT','COTTON','SORGHUM',"BARLEY","TOBACCO","OATS","PEANUTS",
 #"BEANS", "SUGARBEETS", "SUNFLOWER"
 
+# units reported
+
+#Corn	bu/acre
+#Soybean	bu/acre
+#Wheat	bu/acre
+#Barley	bu/acre
+#Oats	bu/acre
+#Sorghum	bu/acre
+#Cotton lb/acre
+#Peanuts lb/acre
+#Sugarbeets ton/acre
+
+
 # ---- Extract yield data and filter to counties with at least 15 years of yield data ----
 
 # ---- corn ----
@@ -166,7 +179,7 @@ d.SOYBEANS <- d %>%
            county_ansi != "") %>%
   mutate(
     GEOID = paste(state_ansi, county_ansi, sep = ""),
-    Yield_mg_ha = as.numeric(Value) * 0.0628
+    Yield_mg_ha = as.numeric(Value) * 0.0628 # this should be 0.0673 for soybean. The final predictions used this conversion factor
   ) %>%
   mutate(crop = 'SOYBEANS') %>%
   dplyr::select(
@@ -255,7 +268,7 @@ d.WHEAT <- d %>%
            county_ansi != "") %>%
   mutate(
     GEOID = paste(state_ansi, county_ansi, sep = ""),
-    Yield_mg_ha = as.numeric(Value) * 0.0628
+    Yield_mg_ha = as.numeric(Value) * 0.0628 # this should be 0.0673 for wheat. The final predictions used this conversion factor
   ) %>%
   mutate(crop = 'WHEAT') %>%
   dplyr::select(
@@ -347,7 +360,7 @@ d.COTTON <- d %>%
     county_ansi != "") %>%
   mutate(
     GEOID = paste(state_ansi, county_ansi, sep = ""),
-    Yield_mg_ha = as.numeric(Value) * 0.0628
+    Yield_mg_ha = as.numeric(Value) * 0.0628 # this should be 0.00112085 for cotton. The final predictions used this conversion factor
   ) %>%
   mutate(crop = 'COTTON') %>%
   dplyr::select(
@@ -524,7 +537,7 @@ d.BARLEY <- d %>%
            county_ansi != "") %>%
   mutate(
     GEOID = paste(state_ansi, county_ansi, sep = ""),
-    Yield_mg_ha = as.numeric(Value) * 0.0628
+    Yield_mg_ha = as.numeric(Value) * 0.0628 # this should be 0.0538 for barley, the final predictions used this conversion factor
   ) %>%
   mutate(crop = 'BARLEY') %>%
   dplyr::select(
@@ -614,7 +627,7 @@ d.OATS <- d %>%
            county_ansi != "") %>%
   mutate(
     GEOID = paste(state_ansi, county_ansi, sep = ""),
-    Yield_mg_ha = as.numeric(Value) * 0.0628
+    Yield_mg_ha = as.numeric(Value) * 0.0628 # this should be 0.03588 for oats, the final predictions used this conversion factor
   ) %>%
   mutate(crop = 'OATS') %>%
   dplyr::select(
@@ -703,7 +716,7 @@ d.PEANUTS <- d %>%
            county_ansi != "") %>%
   mutate(
     GEOID = paste(state_ansi, county_ansi, sep = ""),
-    Yield_mg_ha = as.numeric(Value) * 0.0628
+    Yield_mg_ha = as.numeric(Value) * 0.0628 # this should be 0.00112085 for peanuts, the final predictions used this conversion factor 
   ) %>%
   mutate(crop = 'PEANUTS') %>%
   dplyr::select(
@@ -792,7 +805,7 @@ d.SUGARBEETS <- d %>%
            county_ansi != "") %>%
   mutate(
     GEOID = paste(state_ansi, county_ansi, sep = ""),
-    Yield_mg_ha = as.numeric(Value) * 0.0628
+    Yield_mg_ha = as.numeric(Value) * 0.0628 # tons/acre: this should be 2.242 for sugarbeets, the final predictions used this conversion factor 
   ) %>%
   mutate(crop = 'SUGARBEETS') %>%
   dplyr::select(
@@ -960,7 +973,7 @@ d.TOBACCO <- d %>%
            county_ansi != "") %>%
   mutate(
     GEOID = paste(state_ansi, county_ansi, sep = ""),
-    Yield_mg_ha = as.numeric(Value) * 0.0628
+    Yield_mg_ha = as.numeric(Value) * 0.0628 # lb/acre: this should be 0.00112085 for tobacco, the final predictions used this conversion factor 
   ) %>%
   mutate(crop = 'TOBACCO') %>%
   dplyr::select(

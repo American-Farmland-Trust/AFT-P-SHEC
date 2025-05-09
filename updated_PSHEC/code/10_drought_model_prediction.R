@@ -203,7 +203,7 @@ write_results <- function(i) {
 lapply(crop_name, write_results)
 
 
-##### Extract an all-county list ####
+##### Extract an all-county list: not run ####
 
 # Define the folder containing the drought result files
 folder_path <- "results/drought_predictions/"

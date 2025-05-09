@@ -1,0 +1,108 @@
+---
+title: "tool_coverage"
+author: "ML"
+date: "2025-04-24"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+```
+
+# read county list
+
+```{r data}
+
+county_list <- read.csv('data/intermediate_data/all_crops_final_county_list_2000_2023.csv')
+# Ensure the 'GEOID' column is a string with 5 characters, left-padded with zeros
+county_list$GEOID <- formatC(county_list$GEOID, width = 5, format = 'd' ,flag = '0')
+
+```
+
+# load needed packages and boundries 
+
+```{r boundries}
+library(ggplot2)
+library(usmap)
+library(ggpubr)
+
+# get state boundaries
+states <- us_map(regions = 'states', exclude = c('AK','HI'))
+
+# get county boundaries 
+county <- us_map(regions = 'counties', exclude = c('AK','HI'))
+```
+
+# Create a map showing the coverage of yield and drought model results
+```{r maps}
+
+# combine data
+all_counties <- county_list %>%
+  group_by(state_alpha, GEOID) %>%
+  summarise(yield_prediction = sum(yield_prediction,na.rm = TRUE),
+            drought_prediction = sum(drought_prediction, na.rm = TRUE)) %>%
+  mutate(covered_counties = case_when(
+    drought_prediction == 0 ~ 'yield',
+    drought_prediction > 0 ~ 'yield_drought'
+  )) %>%
+  left_join(county, by = c('GEOID'='fips'))
+
+#create the map
+all_counties_map<- ggplot() +
+  geom_polygon(data = all_counties, aes(x =x, y=y, group = group, fill = 'Covered counties'),alpha = 0.9) +
+  geom_polygon(data = county, aes(x = x, y = y, group = group), fill = NA, color = 'gray20') +
+  geom_polygon(data = states, aes(x = x, y = y, group = group), fill = NA, color = 'black', linewidth =1) +
+  scale_fill_manual(values = 'darkorange3', name = 'Covered counties', guide = NULL) + 
+  #ggtitle('Current P-SHEC coverage') +
+  coord_equal() +
+  theme_void() #+
+  #theme(plot.title = element_text(size = 24, hjust = 0.5, face = 'bold'))
+
+all_counties_map
+
+ggsave(all_counties_map, file= 'figures/all_counties_map_final.png')
+
+```
+
+# generate crop specific yield and drought maps
+
+```{r crop_map}
+
+# combine data
+crop_counties <- county_list %>%
+  mutate(covered_counties = case_when(
+    drought_prediction == 1 ~ 'yield_drought',
+    is.na(drought_prediction) ~ 'yield'
+  )) %>%
+  left_join(county, by = c('GEOID'='fips'))
+
+# reorder the factor level
+crop_counties$covered_counties <- factor(crop_counties$covered_counties, levels = c("yield_drought", "yield"))
+  
+crop_map <- ggplot() +
+  geom_polygon(data = crop_counties, aes(x =x, y=y, group = group, fill = covered_counties),alpha = 0.9) +
+  geom_polygon(data = county, aes(x = x, y = y, group = group), fill = NA, color = 'gray40', size = 0.05) +
+  geom_polygon(data = states, aes(x = x, y = y, group = group), fill = NA, color = 'black', size =0.3) +
+  scale_fill_manual(values = c('yield_drought' = 'forestgreen','yield' = 'gold'), 
+                    labels = c('yield_drought' = 'Yield & Drought', 'yield' = 'Yield Only'),
+                    name = 'P-SHEC covered counties') + 
+  facet_wrap(~crop,ncol = 3)+
+  coord_equal() +
+  theme_void() +
+  theme(#plot.title = element_text(size = 24, hjust = 0.3, face = 'bold'),
+        strip.text = element_text(margin = margin(b = 0),size = 10,face = 'bold'),
+        legend.position = c(0.65, 0.1),   
+        #legend.justification = c(0, 0),
+        legend.title = element_text(face = "bold"),
+        legend.text = element_text(size = 12)
+        )
+
+crop_map
+
+ggsave(crop_map, file= 'figures/crop_specfic_counties_map_final.png')
+
+```
