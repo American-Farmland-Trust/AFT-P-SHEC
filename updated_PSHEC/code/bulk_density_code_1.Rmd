@@ -1,0 +1,233 @@
+---
+title: "gSSURGO_soils_processing_1"
+author: "ML"
+date: "2025-01-25"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+## setup
+
+```{r setup}
+
+library(tidyverse)
+library(sf)
+library(raster)
+library(tigris)
+library(fuzzyjoin)
+library(parallel)
+library(aqp)
+library(fasterize)
+library(readr)
+
+```
+
+## create a list of gdb files
+
+works if each state is a gdb folder in the directory
+
+```{r gdb}
+
+# Create list of .gdb files
+gdb_list <- list.files("/home/shared/Data_updates_Jan2025/gSSURGO by State/", full.names = T, pattern = "gdb")
+# ML: the gSSURGO CONUS data is too large to be able to read; downloading files by states and read by states
+
+# Create a series of objects that will later be used to filter and clip gSSURGO data----
+
+# Call in FIPS information and codes for counties used in analysis
+nass_15 <- read.csv("bulk_density/all_10_crops_merged_data_county_list_ordered_2000_2023.csv")
+# Format the GEOID column to ensure it has a fixed width of 5 digits,
+# padding with leading zeros if necessary
+nass_15$GEOID <- formatC(nass_15$GEOID, width = 5, format = 'd' ,flag = '0')
+
+data(fips_codes) #ML: this is a dataset from the package tigris
+fips_codes #ML: 3247 observations
+fips_codes <- fips_codes %>%
+  mutate(CH.GEOID = paste(state,county_code, sep = ""), 
+         GEOID = paste(state_code,county_code, sep = "")) %>%
+  filter(GEOID %in% unique(nass_15$GEOID)) %>%  
+  mutate(county = str_remove(county, " County")) 
+
+# Call in 'sacatalog' table from gSSURGO
+# While the CH.GEOID column matches the FIPS code for most counties, 
+# in some states, counties are combined into the same soil survey area
+# This step is to match CH.GEOID to FIPS codes
+
+# ML: this step goes to each state gdb folder 
+
+sa_catalogs <- plyr::ldply(gdb_list, function(i) sf::st_read(dsn = i, layer = "sacatalog")) %>%
+  dplyr::select(-tabularversion, -tabcertstatus, -tabcertstatusdesc, -tabnasisexportdate, -tabularverest, -tabularversion, 
+                -sacatalogkey, -saversion, -saverest, -fgdcmetadata) %>%
+  mutate(state =str_sub(areasymbol, end = 2),
+         areaname = str_remove(areaname, pattern = '\\s*,.*'))
+
+sa_subset <- sa_catalogs %>%
+  regex_right_join(fips_codes %>%
+                     anti_join(sa_catalogs, by = c(CH.GEOID = "areasymbol")), 
+                   by = c(state = "state", areaname = "county")) %>%
+  #Drop Harford County survey area and Boyd/Greenup County in KY
+  filter(!areasymbol == "MD600",
+         !areasymbol == "TN610",
+         !areaname == "Boyd and Greenup Counties") %>%
+  full_join(sa_catalogs %>%
+              inner_join(fips_codes, by = c(areasymbol = "CH.GEOID"))) %>%
+  dplyr::select(-CH.GEOID, -state.y) %>%
+  rename("state" = state.x) 
+
+```
+
+## extract data and save data to folder all_states_gssurgo)
+
+```{r data}
+
+# Define the output directory
+output_dir <- 'bulk_density/all_states_gssurgo/'
+
+# Ensure the directory exists before the loop starts
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
+}
+
+
+# the Valu1 table is a compilation of 58 pre-summarized or "ready to map" attributes
+#library(tictoc)
+
+x <- split(gdb_list, ceiling(seq_along(gdb_list)/5)) # divide list to combine every 5 states
+
+# loop through the list
+
+for (n in 1:length(x)) {
+  
+gdb_list <- x[[n]]
+  
+all_states_gssurgo <- parallel::mclapply(mc.cores = 28, gdb_list, function(i){
+  
+  # Merge MUPOLYGON and valu1 tables to start
+  temp1 <-  sf::st_read(dsn = i, layer = "MUPOLYGON") %>%
+    left_join(sf::st_read(dsn = i, layer = "Valu1"),
+              by = c("MUKEY" = "mukey")) 
+  
+  # Depth slices from chorizon table
+  temp2 <- sf::st_read(i, layer = "chorizon")
+  depths(temp2) <- cokey ~ hzdept_r + hzdepb_r
+  
+  temp2 <- slab(temp2, 
+                fm= cokey ~ dbthirdbar_r, 
+                #The oven dry weight of the less than 2 mm soil material per unit volume of soil at a water tension of 1/3 bar.
+                # At least two papers used this variable to represent bulk density
+                #https://soil.copernicus.org/articles/8/559/2022/
+                #https://pubs.usgs.gov/ds/0866/
+                slab.structure=c(0, 30), 
+                slab.fun=mean, na.rm=TRUE)  %>%
+    reshape2::dcast(., cokey + bottom ~ variable, value.var = 'value') %>%
+    rename_all(.funs = function(x) paste("SSURGO", x, sep = "_")) %>%
+    dplyr::select(-SSURGO_bottom)  
+ 
+  # Component table
+  temp3 <- sf::st_read(i, layer = "component") %>%
+    dplyr::select(comppct_r, cokey, mukey,majcompflag) 
+  # comppct_r: The percentage of the component of the mapunit.
+  # majcompflag: Indicates whether or not a component is a major component in the mapunit.
+  
+  # Join component and horizon data and take weighted averages for each map unit
+  temp4 <- temp3 %>%
+    left_join(temp2, by = c("cokey"="SSURGO_cokey")) %>%
+    group_by(mukey) %>%
+    summarize(bd = weighted.mean(SSURGO_dbthirdbar_r, w = comppct_r, na.rm = TRUE)) %>% # add drainage class
+    janitor::clean_names(.)
+  
+  temp4[is.na(temp4)] <- NA
+
+  # Join temp4 and temp1 dataframes together to match aggregated component data to mapunits
+  
+  temp5 <- temp1 %>%
+    dplyr::select(AREASYMBOL, MUSYM, MUKEY) %>%
+    #janitor::clean_names(.) %>% 
+    #ML: this step is trying to make names consistent and unique, but it gives a break sf object and creates the internal error (can't find 'agr' columns) when renaming in the next step; disable this step will not generate the error
+    left_join(temp4, by =c("MUKEY" = "mukey")) # ML: added by =c("MUKEY" = "mukey")
+  
+  return(temp5)
+})
+
+write_rds(all_states_gssurgo, 
+        file = paste0("bulk_density/all_states_gssurgo/all_states_gssurgo_n_15_part",n,".rds"))
+
+
+rm(all_states_gssurgo)
+gc()
+
+}
+
+#toc()
+
+
+```
+
+
+# Collapse list of sf features into one object, then split it into a list based on county code
+
+ML: divided into two steps (or the server will crash due to RAM)
+
+## 1. first save county data to the hard drive 
+
+```{r list}
+# Define the output directory
+output_dir <- 'bulk_density/all_counties_gssurgo/'
+
+# Ensure the directory exists before the loop starts
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
+}
+
+#list gssurgo files in the all_states_gssurgo folder
+file_list <- list.files(path = 'bulk_density/all_states_gssurgo/','rds',full.names = TRUE)
+
+for (i in 1:length(file_list)) {
+
+all_states_gssurgo <- readRDS(
+  paste0("bulk_density/all_states_gssurgo/all_states_gssurgo_n_15_part",i,".rds"))
+
+all_counties_gssurgo <- data.table::rbindlist(all_states_gssurgo) %>%  
+  filter(AREASYMBOL %in% sa_subset$areasymbol) %>% # ML: all captital letters
+  left_join(sa_subset, by = c("AREASYMBOL" = "areasymbol")) %>%
+  dplyr::rename(areasymbol = AREASYMBOL)
+
+write_rds(all_counties_gssurgo, 
+          file = paste0("bulk_density/all_counties_gssurgo/all_counties_gssurgo_part",i,".rds"))
+
+gc()
+
+}
+
+```
+
+## 2. then split to counties 
+
+```{r counties}
+
+# Define the output directory
+output_dir <- 'bulk_density/county_gssurgo_gdbs/'
+
+# Ensure the directory exists before the loop starts
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
+}
+
+#list gssurgo files in the folder
+file_list <- list.files(path = 'bulk_density/all_counties_gssurgo/','rds',full.names = TRUE)
+
+for (i in 1:length(file_list)) {
+
+all_counties_gssurgo <- read_rds(file = paste0("bulk_density/all_counties_gssurgo/all_counties_gssurgo_part",i,".rds"))
+
+mclapply(mc.cores = 4, unique(all_counties_gssurgo$GEOID), FUN = function(x){
+  write_rds(all_counties_gssurgo[all_counties_gssurgo$GEOID == x,], 
+            file = paste("bulk_density/county_gssurgo_gdbs/GEOID_", x, ".rds", sep = ""))
+})
+
+gc()
+
+}
+
+```
