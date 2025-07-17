@@ -106,3 +106,41 @@ crop_map
 ggsave(crop_map, file= 'figures/crop_specfic_counties_map_final.png')
 
 ```
+
+# generate crop specific yield and drought maps: using the same color
+
+```{r crop_map}
+
+# combine data
+crop_counties_both <- county_list %>%
+  #mutate(covered_counties = case_when(
+  #  drought_prediction == 1 ~ 'yield_drought',
+  #  is.na(drought_prediction) ~ 'yield'
+  #)) %>%
+  left_join(county, by = c('GEOID'='fips'))
+
+# reorder the factor level
+#crop_counties$covered_counties <- factor(crop_counties$covered_counties, levels = c("yield_drought", "yield"))
+  
+crop_map_both <- ggplot() +
+  geom_polygon(data = crop_counties_both, aes(x =x, y=y, group = group, fill = as.factor(yield_prediction)),alpha = 0.9) +
+  geom_polygon(data = county, aes(x = x, y = y, group = group), fill = NA, color = 'gray40', size = 0.05) +
+  geom_polygon(data = states, aes(x = x, y = y, group = group), fill = NA, color = 'black', size =0.3) +
+  scale_fill_manual(values = 'forestgreen', 
+                    labels =  'P-SHEC covered counties') + 
+  facet_wrap(~crop,ncol = 3)+
+  coord_equal() +
+  theme_void() +
+  theme(#plot.title = element_text(size = 24, hjust = 0.3, face = 'bold'),
+        strip.text = element_text(margin = margin(b = 0),size = 10,face = 'bold'),
+        legend.position = c(0.65, 0.1),   
+        #legend.justification = c(0, 0),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 12)
+        )
+
+crop_map_both
+
+ggsave(crop_map_both, file= 'figures/crop_specfic_counties_map_final_one_color.png')
+
+```
