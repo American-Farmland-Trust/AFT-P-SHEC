@@ -24,11 +24,15 @@ COMET_Base_Final <- COMET_Base_Final %>%
 
 COMET_Base_Final <- COMET_Base_Final %>%
   mutate(
-    MG_C_MG_Soil_Yr = (MG_C_M3YR * COMET_Base_Final$bd_mean),
+    #original line
+    #MG_C_MG_Soil_Yr = (MG_C_M3YR * COMET_Base_Final$bd_mean),
+    #updated line per ML 
+    MG_C_MG_Soil_Yr = (MG_C_M3YR / COMET_Base_Final$bd_mean),
     MG_SOM_MG_Soil = MG_C_MG_Soil_Yr/0.58,
     '%SOM/yr' =  MG_SOM_MG_Soil*100
     
   )
+
 
 
 saveRDS(COMET_Base_Final, "COMET_Base_Final.rds")
