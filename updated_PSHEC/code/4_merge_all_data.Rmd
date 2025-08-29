@@ -24,6 +24,7 @@ library(stringr)
 library(ggplot2)
 library(ggpubr)
 library(readr)
+library(stringr)
 ```
 
 # Read in data 
@@ -132,7 +133,6 @@ lapply(crops, combine_function)
 
 ```
 
-
 Extract county crop list
 ```{r county_list}
 #### Extract an all-county list ####
@@ -189,6 +189,82 @@ write.csv(all_crop_county_wide_order, file = 'data/intermediate/all_10_crops_mer
           row.names = FALSE)
 
 
+```
+
+Extract baseline SOM
+
+```{r SOM}
+
+# Define the folder containing the rds files
+folder_path <- "data/merged_data/"
+
+# Get a list of all CSV files in the folder
+rds_files <- list.files(path = folder_path, pattern = "*.rds", full.names = TRUE)
+
+# Create a container to store data from each file
+lst <- list()
+
+# Loop through each CSV file
+for (file in rds_files) {
+  # Read the CSV file
+  data <- read_rds(file)
+  
+  # Ensure the 'GEOID' column is a string with 5 characters, left-padded with zeros
+  data$GEOID <- formatC(data$GEOID, width = 5, format = 'd' ,flag = '0')
+  
+  # Extract unique GEOID values
+  crop_summary <- data %>%
+    dplyr::select(crop,state_alpha,GEOID,ssurgo_om_mean) %>%
+    unique()
+
+  # Store the result in the list
+  lst[[file]] <- crop_summary
+}
+
+# Combine all the unique rows from all files
+all_crop_county <- do.call(dplyr::bind_rows,lst) %>% 
+  unique() 
+
+data(fips_codes) #ML: this is a dataset from the package tigris
+fips_codes #ML: 3247 observations
+fips_codes <- fips_codes %>%
+  mutate(CH.GEOID = paste(state,county_code, sep = ""), 
+         GEOID = paste(state_code,county_code, sep = "")) %>%
+  #filter(GEOID %in% unique(nass_15$GEOID)) %>%  
+  mutate(county = str_remove(county, " County")) 
+
+SOM_1 <- all_crop_county %>% 
+  left_join(fips_codes, by = 'GEOID') %>%
+  dplyr::select(GEOID,ssurgo_om_mean, crop, state, state_name,county) %>%
+  mutate(county = toupper(county),
+         crop = str_to_title(crop)) %>%
+  mutate(crop = case_when(crop == 'Sugarbeets' ~ 'Sugar Beets', TRUE ~ crop)) %>%
+  rename(fipsint = GEOID, 
+         base_SOM = ssurgo_om_mean,
+         Crop = crop,
+         State = state,
+         County = county)
+
+saveRDS(SOM_1, file='../RShiny_General_Info_Data/SOM_County_Base_Update_1.rds')
+
+# check dataframe differences: before SOM 10% filter vs. after
+# choose the join key
+key_cols <- c("fipsint","Crop","State","state_name","County")
+
+A <- SOM_1
+B <- SOM_County_Base_Update
+
+# 0) quick sizes
+cat("Rows A:", nrow(A), " Rows B:", nrow(B), "\n")
+
+# 1) Keys-only comparison (distinct by the key)
+A_keys <- A %>% distinct(across(all_of(key_cols)))
+B_keys <- B %>% distinct(across(all_of(key_cols)))
+
+# these are the rows filtered out 
+only_in_B_keys <- anti_join(B_keys, A_keys, by = key_cols)
+
+saveRDS(only_in_B_keys, file = '../RShiny_General_Info_Data/Rows_removed_in_SOM_County_Base_Update_1.rds')
 
 ```
 
