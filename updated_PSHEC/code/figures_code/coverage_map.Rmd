@@ -144,3 +144,258 @@ crop_map_both
 ggsave(crop_map_both, file= 'figures/crop_specfic_counties_map_final_one_color.png')
 
 ```
+
+# generate crop specific yield and drought maps: highlight specified states
+
+```{r crop_map}
+
+highlight_states <- states %>%
+  filter(abbr %in% c('IL', 'IN', 'MI', 'MN', 'OH', 'WI'))
+
+highlight_states$legend_group <- "Joyce Foundation's priority states"
+
+# 'Walton Family Foundation focused states': 'IA','IL','IN','AR','LA','MS'
+# "Joyce Foundation's priority states": 'IL', 'IN', 'MI', 'MN', 'OH', 'WI'
+
+foundation_name <- "Joyce Foundation's priority states"
+
+# combine data
+crop_counties_both <- county_list %>%
+  #mutate(covered_counties = case_when(
+  #  drought_prediction == 1 ~ 'yield_drought',
+  #  is.na(drought_prediction) ~ 'yield'
+  #)) %>%
+  left_join(county, by = c('GEOID'='fips'))
+
+crop_counties_both$legend_group <- 'P-SHEC covered counties'
+
+# reorder the factor level
+#crop_counties$covered_counties <- factor(crop_counties$covered_counties, levels = c("yield_drought", "yield"))
+  
+crop_map_hl <- ggplot() +
+  geom_polygon(data = crop_counties_both, aes(x =x, y=y, group = group, fill = legend_group),alpha = 0.9, color = NA) +
+  geom_polygon(data = county, aes(x = x, y = y, group = group), fill = NA, color = 'gray40', linewidth = 0.05) +
+  geom_polygon(data = states, aes(x = x, y = y, group = group), fill = NA, color = 'black', linewidth =0.3) +
+  geom_polygon(data = highlight_states, aes(x = x, y = y, group = group, color = legend_group), fill = NA, linewidth =1) +
+  scale_fill_manual(values = c("P-SHEC covered counties" = "forestgreen"),
+                    guide = guide_legend(order = 1)) + 
+  scale_color_manual(values = c("Joyce Foundation's priority states" = 'magenta' ), # color:"darkmagenta", 'red'
+                    guide = guide_legend(order = 2)) + 
+  facet_wrap(~crop,ncol = 3)+
+  coord_equal() +
+  theme_void() +
+  theme(#plot.title = element_text(size = 24, hjust = 0.3, face = 'bold'),
+        strip.text = element_text(margin = margin(b = 0),size = 16,face = 'bold'),
+        legend.position = c(0.65, 0.1),   
+        #legend.justification = c(0, 0),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 15)
+        )
+
+crop_map_hl
+
+#ggsave(crop_map_hl, file= 'other/crop_specfic_counties_map_overlap_with_Walton_Family_Foundation_states_magenta.png')
+
+
+```
+
+calculate number of counties for each crop in specified states
+```{r number}
+# 'Walton Family Foundation focused states': 'IA','IL','IN','AR','LA','MS'
+# "Joyce Foundation's priority states": 'IL', 'IN', 'MI', 'MN', 'OH', 'WI'
+
+highlight_counties <- county_list %>%
+  filter(state_alpha %in% c('IL', 'IN', 'MI', 'MN', 'OH', 'WI')) %>%
+  group_by(state_alpha,crop) %>%
+  summarise(p_shec_n = n())
+
+county_name <- county %>%
+  select(abbr, fips,county) %>%
+  unique() %>% 
+  filter(abbr %in% c('IL', 'IN', 'MI', 'MN', 'OH', 'WI')) %>%
+  group_by(abbr) %>%
+  summarise(n=n())
+  
+library(tidyverse)
+total_n <- highlight_counties %>%
+  left_join(county_name,by=c('state_alpha' = 'abbr')) %>%
+  mutate(coverage = p_shec_n/n ) %>%
+  select(-p_shec_n) %>%
+  pivot_wider(names_from = crop,values_from = coverage, values_fill = 0)
+
+total_coverage <- highlight_counties %>%
+  left_join(county_name,by=c('state_alpha' = 'abbr')) %>%
+  pivot_wider(names_from = crop, values_from = p_shec_n) 
+
+# identify crop columns
+crop_cols <- colnames(total_coverage[,-c(1:2)])
+
+summary_total <- total_coverage %>% 
+  bind_rows(
+    total_coverage %>%
+       ungroup() %>%
+        summarise(
+        state_alpha = "Total",
+        across(-state_alpha, sum, na.rm = TRUE)
+      )
+  ) %>%
+  filter(state_alpha == 'Total') 
+
+percent_row <- summary_total %>%
+  mutate(across(all_of(crop_cols), ~ .x/n),
+         state_alpha = 'Percent',
+         n = NA
+)
+
+# Use unlist to get named values
+percent_values <- unlist(percent_row[1, crop_cols])
+
+# Sort and get crop names in descending order
+ordered_crops <- names(sort(percent_values, decreasing = TRUE))
+
+# Add the percent row
+summary_with_percent <- bind_rows(total_n,summary_total, percent_row) %>%
+  select(state_alpha, n, all_of(ordered_crops))
+
+
+```
+
+plot only overlap crops
+```{r overlap_crops}
+# only overalp crops
+ordered_crops
+
+crop_counties_filter <- crop_counties_both %>%
+  filter(crop %in% ordered_crops) %>%
+  mutate(crop = factor(crop, levels = ordered_crops))
+
+crop_map_ol <- ggplot() +
+  geom_polygon(data = crop_counties_filter, aes(x =x, y=y, group = group, fill = legend_group),alpha = 0.9, color = NA) +
+  geom_polygon(data = county, aes(x = x, y = y, group = group), fill = NA, color = 'gray40', size = 0.05) +
+  geom_polygon(data = states, aes(x = x, y = y, group = group), fill = NA, color = 'black', size =0.3) +
+  geom_polygon(data = highlight_states, aes(x = x, y = y, group = group, color = legend_group), fill = NA, size =1) +
+  scale_fill_manual(values = c("P-SHEC covered counties" = "forestgreen"),
+                    guide = guide_legend(order = 1)) + 
+  scale_color_manual(values = c("Joyce Foundation's priority states" = 'magenta' ), # color:"darkmagenta", 'red'
+                    guide = guide_legend(order = 2)) + 
+  facet_wrap(~crop,ncol = 3)+
+  coord_equal() +
+  theme_void() +
+  theme(#plot.title = element_text(size = 24, hjust = 0.3, face = 'bold'),
+        strip.text = element_text(margin = margin(b = 0),size = 16,face = 'bold'),
+        legend.position = 'bottom',   
+        #legend.justification = c(0, 0),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 15)
+        )
+
+crop_map_ol
+
+ggsave(crop_map_ol, file= 'other/JOYCE_filtered_ordered_crop_specfic_counties_map_overlap_with_Joyce_states_magenta.png')
+```
+
+focused states
+
+```{r state}
+# cA numbers
+CA_total_county_name <- county %>%
+  select(abbr, fips,county) %>%
+  unique() %>% 
+  filter(abbr == 'CA') %>%
+  group_by(abbr) %>%
+  summarise(n=n())
+
+CA_number <- county_list %>%
+  filter(state_alpha == 'CA') %>%
+  group_by(crop) %>%
+  summarise(p_shec_n = n()) %>%
+  mutate(p_shec_percent = p_shec_n/CA_total_county_name$n) %>%
+  arrange(desc(p_shec_n))
+
+CA_crop_order <- CA_number$crop
+
+# get the focused state boundaries
+CA_states <- us_map(regions = 'states', include = 'CA')
+
+CA_county <- us_map(regions = 'counties', include = 'CA')
+
+CA_crop_counties <- crop_counties_both %>%
+  filter(state_alpha == 'CA') %>%
+  mutate(crop = factor(crop, levels = CA_crop_order))
+
+crop_map_CA <- ggplot() +
+  geom_polygon(data = CA_crop_counties, aes(x =x, y=y, group = group, fill = legend_group),alpha = 0.9, color = NA) +
+  geom_polygon(data = CA_county, aes(x = x, y = y, group = group), fill = NA, color = 'gray40', size = 0.1) +
+  geom_polygon(data = CA_states, aes(x = x, y = y, group = group), fill = NA, color = 'black', size =0.5) +
+  #geom_polygon(data = highlight_states, aes(x = x, y = y, group = group, color = legend_group), fill = NA, size =1) +
+  scale_fill_manual(values = c("P-SHEC covered counties" = "forestgreen"),
+                    guide = guide_legend(order = 1)) + 
+  #scale_color_manual(values = c("Joyce Foundation's priority states" = 'magenta' ), # color:"darkmagenta", 'red'
+  #                 guide = guide_legend(order = 2)) + 
+  facet_wrap(~crop,nrow = 1)+
+  coord_equal() +
+  theme_void() +
+  theme(#plot.title = element_text(size = 24, hjust = 0.3, face = 'bold'),
+        strip.text = element_text(margin = margin(b = 0),size = 16,face = 'bold'),
+        legend.position = 'bottom',   
+        #legend.justification = c(0, 0),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 15)
+        )
+
+crop_map_CA
+
+ggsave(crop_map_CA, file= 'other/CA_crop_specfic_counties_map.png')
+
+# ----------------------------TX -----------------------#
+# TX numbers
+TX_total_county_name <- county %>%
+  select(abbr, fips,county) %>%
+  unique() %>% 
+  filter(abbr == 'TX') %>%
+  group_by(abbr) %>%
+  summarise(n=n())
+
+TX_number <- county_list %>%
+  filter(state_alpha == 'TX') %>%
+  group_by(crop) %>%
+  summarise(p_shec_n = n()) %>%
+  mutate(p_shec_percent = p_shec_n/TX_total_county_name$n) %>%
+  arrange(desc(p_shec_n))
+
+TX_crop_order <- TX_number$crop
+
+# get the focused state boundaries
+TX_states <- us_map(regions = 'states', include = 'TX')
+
+TX_county <- us_map(regions = 'counties', include = 'TX')
+
+TX_crop_counties <- crop_counties_both %>%
+  filter(state_alpha == 'TX') %>%
+  mutate(crop = factor(crop, levels = TX_crop_order))
+
+crop_map_TX <- ggplot() +
+  geom_polygon(data = TX_crop_counties, aes(x =x, y=y, group = group, fill = legend_group),alpha = 0.9, color = NA) +
+  geom_polygon(data = TX_county, aes(x = x, y = y, group = group), fill = NA, color = 'gray40', size = 0.1) +
+  geom_polygon(data = TX_states, aes(x = x, y = y, group = group), fill = NA, color = 'black', size =0.5) +
+  #geom_polygon(data = highlight_states, aes(x = x, y = y, group = group, color = legend_group), fill = NA, size =1) +
+  scale_fill_manual(values = c("P-SHEC covered counties" = "forestgreen"),
+                    guide = guide_legend(order = 1)) + 
+  #scale_color_manual(values = c("Joyce Foundation's priority states" = 'magenta' ), # color:"darkmagenta", 'red'
+  #                 guide = guide_legend(order = 2)) + 
+  facet_wrap(~crop,nrow = 2)+
+  coord_equal() +
+  theme_void() +
+  theme(#plot.title = element_text(size = 24, hjust = 0.3, face = 'bold'),
+        strip.text = element_text(margin = margin(b = 0),size = 16,face = 'bold'),
+        legend.position = 'bottom',   
+        #legend.justification = c(0, 0),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 15)
+        )
+
+crop_map_TX
+
+ggsave(crop_map_TX, file= 'other/TX_crop_specfic_counties_map.png')
+
+```
