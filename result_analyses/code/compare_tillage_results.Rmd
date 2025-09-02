@@ -1,0 +1,249 @@
+---
+title: "yield_change"
+output: html_document
+date: "2023-11-28"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(purrr)
+library(tidyverse)
+library(stringr)
+```
+
+# read data
+Yield data
+```{r data}
+#read predicted yield data and county level variables
+corn <- read_rds('results/yield_predictions/CORN_Pred_Normal.rds')
+soy <- read_rds('results/yield_predictions/SOYBEANS_Pred_Normal.rds')
+
+```
+
+COMET data and baseline SOM
+```{r comet}
+COMET_Base<-readxl::read_excel("../Rshiny/COMET Planner Data_Concise.xlsx", "All States Filtered")
+BD_Base<-read.csv('data/intermediate_data/bulk_density_by_county_gssurgo_2024.csv')
+# Ensure the 'GEOID' column is a string with 5 characters, left-padded with zeros
+BD_Base$GEOID <- formatC(BD_Base$GEOID, width = 5, format = 'd' ,flag = '0')
+
+#Assumes 30 cm depth for calculation 
+#bulk density will vary by county
+COMET_Base_Final <- COMET_Base[, c("state", "county", "fipsint", "cps_name", "planner_implementation", "soil_carbon_co2")]
+COMET_Base_Final <- COMET_Base_Final %>%
+  mutate(fipsint = str_pad(fipsint, width = 5, side = "left", pad = "0"))
+
+COMET_Base_Final <- COMET_Base_Final %>%
+  mutate(
+    C_Reduce_T_C_ACYR = soil_carbon_co2 * (12.011 / 44.009),
+    MG_C_M3YR = C_Reduce_T_C_ACYR / (4046.86 * 0.30)
+  )
+
+COMET_Base_Final <- COMET_Base_Final %>%
+  left_join(BD_Base %>% select(state, GEOID, bd_mean),
+            by = c("state", "fipsint"='GEOID')) %>%
+  filter(!is.na(bd_mean))
+
+comet <- COMET_Base_Final %>%
+  mutate(
+    MG_C_MG_Soil_Yr = (MG_C_M3YR / COMET_Base_Final$bd_mean),
+    MG_SOM_MG_Soil = MG_C_MG_Soil_Yr/0.58,
+    '%SOM/yr' =  MG_SOM_MG_Soil*100
+    
+  )
+
+# read baseline county SOM
+base_som <- read_rds('../RShiny_General_Info_Data/SOM_County_Base_Update.rds')
+```
+
+# extract COMET SOM changes and yield predictions for target states
+
+For tillage: compare results to this paper: https://iopscience.iop.org/article/10.1088/1748-9326/ab503b
+Conservation tillage: including reduced tillage and no-till
+
+Corn states: MO, MN, WI, SD, IA, IL, ID, OH, MI
+Soybean states: IN, IL, IA
+
+```{r SOM}
+# Tillage
+comet_states <- comet %>%
+  filter(str_detect(cps_name, regex('Residue and Tillage Management',ignore_case = TRUE)) 
+         #& state %in% c('MO', 'MN', 'WI', 'SD', 'IA', 'IL', 'ID', 'OH', 'MI')
+         ) %>%
+  mutate(SOM_10yr = `%SOM/yr` * 10) %>%
+  group_by(fipsint) %>%
+  summarise(SOM_10yr_mean = mean(SOM_10yr, na.rm = TRUE))
+            #SOM_10yr_max = max(SOM_10yr, na.rm = TRUE),
+            #SOM_10yr_min = min(SOM_10yr, na.rm = TRUE))
+
+# cover crop
+comet_cc <- comet %>%
+  filter(str_detect(cps_name, regex('Cover Crop',ignore_case = TRUE)) 
+         #& state %in% c('MO', 'MN', 'WI', 'SD', 'IA', 'IL', 'ID', 'OH', 'MI')
+         ) %>%
+  mutate(SOM_10yr = `%SOM/yr` * 10) %>%
+  group_by(fipsint) %>%
+  summarise(SOM_10yr_mean = mean(SOM_10yr, na.rm = TRUE))
+            #SOM_10yr_max = max(SOM_10yr, na.rm = TRUE),
+            #SOM_10yr_min = min(SOM_10yr, na.rm = TRUE))
+
+summary(comet_cc$SOM_10yr_mean)
+
+#      Min.    1st Qu.     Median       Mean    3rd Qu.       Max. 
+#-0.0002977  0.0437195  0.1007011  0.1034838  0.1516036  0.4163350 
+
+```
+
+# get county %SOM for calculating yield change
+
+corn
+```{r corn}
+# --------------------------------Tillage--------------------------------------#
+corn_I <- corn %>% 
+  #filter(state_alpha %in% c('MO', 'MN', 'WI', 'SD', 'IA', 'IL', 'ID', 'OH', 'MI')) %>%
+  filter(state_alpha %in% c('IA', 'IL', 'ID')) %>%
+  select(state_alpha, GEOID, ssurgo_om_mean,ssurgo_om_county_mean, pred_yield_Mg_ha) %>%
+  left_join(comet_states, by = c('GEOID' = 'fipsint')) %>%
+  mutate(mean_SOM = case_when(
+    round(ssurgo_om_mean, digits = 2) == round(ssurgo_om_county_mean, digits = 2) ~ 'base',
+    round(ssurgo_om_mean, digits = 2) == round(ssurgo_om_county_mean + SOM_10yr_mean, digits = 2) ~ 'new')) %>%
+  na.omit() %>%
+  group_by(state_alpha,GEOID) %>%
+  nest() %>%
+  mutate(
+    yield_change_perc = map_dbl(data, 
+                           ~ if(nrow(.x) == 2) {
+                             ordered <- .x %>% arrange(ssurgo_om_mean)
+                             100 * diff(ordered[['pred_yield_Mg_ha']]) / ordered[['pred_yield_Mg_ha']][1]
+                             } else NA_real_
+                           )
+    ) %>%
+  select(state_alpha,GEOID, yield_change_perc) %>%
+  unnest(yield_change_perc) %>%
+  na.omit() 
+
+summary(corn_I$yield_change_perc)
+
+# all nine states
+#    Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+#-7.30947 -0.05951  0.06473  0.21612  0.31454  6.15456 
+
+# three states: IA, IL, ID
+#    Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+#-0.56422  0.01415  0.17949  0.32126  0.38478  4.29735 
+
+hist(corn_I$yield_change_perc, breaks  = 30)
+
+corn_I_cf <- t.test(corn_I$yield_change_perc)$conf.int
+
+# the three states
+# [1] 0.2371904 0.4053187
+
+
+#------------------------------- Cover crop------------------------------------#
+corn_cc <- corn %>% 
+  #filter(state_alpha %in% c('MO', 'MN', 'WI', 'SD', 'IA', 'IL', 'ID', 'OH', 'MI')) %>%
+  filter(state_alpha %in% c('IA', 'IL', 'ID', 'OH')) %>%
+  select(state_alpha, GEOID, ssurgo_om_mean,ssurgo_om_county_mean, pred_yield_Mg_ha) %>%
+  left_join(comet_cc, by = c('GEOID' = 'fipsint')) %>%
+  mutate(mean_SOM = case_when(
+    round(ssurgo_om_mean, digits = 2) == round(ssurgo_om_county_mean, digits = 2) ~ 'base',
+    round(ssurgo_om_mean, digits = 2) == round(ssurgo_om_county_mean + SOM_10yr_mean, digits = 2) ~ 'new')) %>%
+  na.omit() %>%
+  group_by(state_alpha,GEOID) %>%
+  nest() %>%
+  mutate(
+    yield_change_perc = map_dbl(data, 
+                           ~ if(nrow(.x) == 2) {
+                             ordered <- .x %>% arrange(ssurgo_om_mean)
+                             100 * diff(ordered[['pred_yield_Mg_ha']]) / ordered[['pred_yield_Mg_ha']][1]
+                             } else NA_real_
+                           )
+    ) %>%
+  select(state_alpha,GEOID, yield_change_perc) %>%
+  unnest(yield_change_perc) %>%
+  na.omit() 
+
+summary(corn_cc$yield_change_perc)
+#    Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+#-2.42105 -0.03793  0.10144  0.24548  0.35573  5.76246 
+
+hist(corn_cc$yield_change_perc, breaks  = 30)
+
+corn_cc_cf <- t.test(corn_cc$yield_change_perc)$conf.int
+#[1] 0.1643102 0.3266434
+```
+
+soybean
+```{r soy}
+
+#-------------------------------Tillage----------------------------------------#
+soy_I <- soy %>% 
+  filter(state_alpha %in% c('IA','IN','IL')) %>%
+  #filter(state_alpha %in% c('IA','IN','IL','OH')) %>%
+  select(state_alpha, GEOID, ssurgo_om_mean,ssurgo_om_county_mean, pred_yield_Mg_ha) %>%
+  left_join(comet_states, by = c('GEOID' = 'fipsint')) %>%
+  mutate(mean_SOM = case_when(
+    round(ssurgo_om_mean, digits = 2) == round(ssurgo_om_county_mean, digits = 2) ~ 'base',
+    round(ssurgo_om_mean, digits = 2) == round(ssurgo_om_county_mean + SOM_10yr_mean, digits = 2) ~ 'new')) %>%
+  na.omit() %>%
+  group_by(state_alpha,GEOID) %>%
+  nest() %>%
+  mutate(
+    yield_change_perc = map_dbl(data, 
+                           ~ if(nrow(.x) == 2) {
+                             ordered <- .x %>% arrange(ssurgo_om_mean)
+                             100 * diff(ordered[['pred_yield_Mg_ha']]) / ordered[['pred_yield_Mg_ha']][1]
+                             } else NA_real_
+                           )
+    ) %>%
+  select(state_alpha,GEOID, yield_change_perc) %>%
+  unnest(yield_change_perc) %>%
+  na.omit() 
+
+summary(soy_I$yield_change_perc)
+#    Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+#-0.88252 -0.01849  0.20577  0.51461  0.82413  5.93986 
+
+hist(soy_I$yield_change_perc, breaks = 30)
+  
+soy_I_cf <- t.test(soy_I$yield_change_perc)$conf.int
+#[1] 0.3846311 0.6445841
+
+#------------------------------- Cover crop------------------------------------#
+soy_cc <- soy %>% 
+  #filter(state_alpha %in% c('MO', 'MN', 'WI', 'SD', 'IA', 'IL', 'ID', 'OH', 'MI')) %>%
+  filter(state_alpha %in% c('IA', 'IL', 'ID', 'OH')) %>%
+  select(state_alpha, GEOID, ssurgo_om_mean,ssurgo_om_county_mean, pred_yield_Mg_ha) %>%
+  left_join(comet_cc, by = c('GEOID' = 'fipsint')) %>%
+  mutate(mean_SOM = case_when(
+    round(ssurgo_om_mean, digits = 2) == round(ssurgo_om_county_mean, digits = 2) ~ 'base',
+    round(ssurgo_om_mean, digits = 2) == round(ssurgo_om_county_mean + SOM_10yr_mean, digits = 2) ~ 'new')) %>%
+  na.omit() %>%
+  group_by(state_alpha,GEOID) %>%
+  nest() %>%
+  mutate(
+    yield_change_perc = map_dbl(data, 
+                           ~ if(nrow(.x) == 2) {
+                             ordered <- .x %>% arrange(ssurgo_om_mean)
+                             100 * diff(ordered[['pred_yield_Mg_ha']]) / ordered[['pred_yield_Mg_ha']][1]
+                             } else NA_real_
+                           )
+    ) %>%
+  select(state_alpha,GEOID, yield_change_perc) %>%
+  unnest(yield_change_perc) %>%
+  na.omit() 
+
+summary(soy_cc$yield_change_perc)
+#    Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+#-1.35815 -0.04347  0.13914  0.44207  0.65053  6.08362
+
+hist(soy_cc$yield_change_perc, breaks  = 30)
+
+soy_cc_cf <- t.test(soy_cc$yield_change_perc)$conf.int
+#[1] 0.3317180 0.5524277
+```
