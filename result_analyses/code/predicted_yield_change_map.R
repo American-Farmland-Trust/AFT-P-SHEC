@@ -164,7 +164,7 @@ drought_map <- function(crop) {
                                               if(nrow(.x) == 2) {
                                                 .x %>% 
                                                   arrange(ssurgo_om_mean) %>%
-                                                  pull(pred_yield_change_percentage) %>%
+                                                  pull(pred_yield_change_percentage) %>% # higher SOM - lower SOM
                                                   diff ()
       } else {NA_real_})
       ) %>% 
