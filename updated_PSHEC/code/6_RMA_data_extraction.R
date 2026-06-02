@@ -8,7 +8,7 @@ library(ggplot2)
 library(stringr)
 library(ggpubr)
 
-#download data for Cause of Loss data from RMA: https://www.rma.usda.gov/tools-reports/summary-business/cause-loss
+#download data for Cause of Loss data from RMA: https://www.rma.usda.gov/tools-reports/summary-of-business/cause-loss
 #download data for submmary of business from RMA: https://www.rma.usda.gov/tools-reports/summary-of-business/state-county-crop-summary-business
 
 # unzip files and save to a dataframe
