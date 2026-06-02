@@ -35,6 +35,17 @@ states <- us_map(regions = 'states', exclude = c('AK','HI'))
 
 # get county boundaries 
 county <- us_map(regions = 'counties', exclude = c('AK','HI'))
+
+# combine data
+crop_counties_both <- county_list %>%
+  #mutate(covered_counties = case_when(
+  #  drought_prediction == 1 ~ 'yield_drought',
+  #  is.na(drought_prediction) ~ 'yield'
+  #)) %>%
+  left_join(county, by = c('GEOID'='fips'))
+
+crop_counties_both$legend_group <- 'P-SHEC covered counties'
+
 ```
 
 # Create a map showing the coverage of yield and drought model results
@@ -397,5 +408,218 @@ crop_map_TX <- ggplot() +
 crop_map_TX
 
 ggsave(crop_map_TX, file= 'other/TX_crop_specfic_counties_map.png')
+
+# ----------------------------AR -----------------------#
+# AR numbers
+AR_total_county_name <- county %>%
+  select(abbr, fips,county) %>%
+  unique() %>% 
+  filter(abbr == 'AR') %>%
+  group_by(abbr) %>%
+  summarise(n=n())
+
+AR_number <- county_list %>%
+  filter(state_alpha == 'AR') %>%
+  group_by(crop) %>%
+  summarise(p_shec_n = n()) %>%
+  mutate(p_shec_percent = p_shec_n/AR_total_county_name$n) %>%
+  arrange(desc(p_shec_n))
+
+AR_crop_order <- AR_number$crop
+
+# get the focused state boundaries
+AR_states <- us_map(regions = 'states', include = 'AR')
+
+AR_county <- us_map(regions = 'counties', include = 'AR')
+
+AR_crop_counties <- crop_counties_both %>%
+  filter(state_alpha == 'AR') %>%
+  mutate(crop = factor(crop, levels = AR_crop_order))
+
+crop_map_AR <- ggplot() +
+  geom_polygon(data = AR_crop_counties, aes(x =x, y=y, group = group, fill = legend_group),alpha = 0.9, color = NA) +
+  geom_polygon(data = AR_county, aes(x = x, y = y, group = group), fill = NA, color = 'gray40', size = 0.1) +
+  geom_polygon(data = AR_states, aes(x = x, y = y, group = group), fill = NA, color = 'black', size =0.5) +
+  #geom_polygon(data = highlight_states, aes(x = x, y = y, group = group, color = legend_group), fill = NA, size =1) +
+  scale_fill_manual(values = c("P-SHEC covered counties" = "forestgreen"),
+                    guide = guide_legend(order = 1)) + 
+  #scale_color_manual(values = c("Joyce Foundation's priority states" = 'magenta' ), # color:"darkmagenta", 'red'
+  #                 guide = guide_legend(order = 2)) + 
+  facet_wrap(~crop,nrow = 2)+
+  coord_equal() +
+  theme_void() +
+  theme(#plot.title = element_text(size = 24, hjust = 0.3, face = 'bold'),
+        strip.text = element_text(margin = margin(b = 0),size = 16,face = 'bold'),
+        legend.position = 'bottom',   
+        #legend.justification = c(0, 0),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 15)
+        )
+
+crop_map_AR
+
+ggsave(crop_map_AR, file= 'other/AR_crop_specfic_counties_map.png')
+
+# ----------------------------MN -----------------------#
+# MN numbers
+MN_total_county_name <- county %>%
+  select(abbr, fips,county) %>%
+  unique() %>% 
+  filter(abbr == 'MN') %>%
+  group_by(abbr) %>%
+  summarise(n=n())
+
+MN_number <- county_list %>%
+  filter(state_alpha == 'MN') %>%
+  group_by(crop) %>%
+  summarise(p_shec_n = n()) %>%
+  mutate(p_shec_percent = p_shec_n/MN_total_county_name$n) %>%
+  arrange(desc(p_shec_n))
+
+MN_crop_order <- MN_number$crop
+
+# get the focused state boundaries
+MN_states <- us_map(regions = 'states', include = 'MN')
+
+MN_county <- us_map(regions = 'counties', include = 'MN')
+
+MN_crop_counties <- crop_counties_both %>%
+  filter(state_alpha == 'MN') %>%
+  mutate(crop = factor(crop, levels = MN_crop_order))
+
+crop_map_MN <- ggplot() +
+  geom_polygon(data = MN_crop_counties, aes(x =x, y=y, group = group, fill = legend_group),alpha = 0.9, color = NA) +
+  geom_polygon(data = MN_county, aes(x = x, y = y, group = group), fill = NA, color = 'gray40', linewidth = 0.1) +
+  geom_polygon(data = MN_states, aes(x = x, y = y, group = group), fill = NA, color = 'black', linewidth =0.5) +
+  #geom_polygon(data = highlight_states, aes(x = x, y = y, group = group, color = legend_group), fill = NA, size =1) +
+  scale_fill_manual(values = c("P-SHEC covered counties" = "forestgreen"),
+                    guide = guide_legend(order = 1)) + 
+  #scale_color_manual(values = c("Joyce Foundation's priority states" = 'magenta' ), # color:"darkmagenta", 'red'
+  #                 guide = guide_legend(order = 2)) + 
+  facet_wrap(~crop,nrow = 2)+
+  coord_equal() +
+  theme_void() +
+  theme(#plot.title = element_text(size = 24, hjust = 0.3, face = 'bold'),
+        strip.text = element_text(margin = margin(b = 0),size = 16,face = 'bold'),
+        legend.position = 'bottom',   
+        #legend.justification = c(0, 0),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 15)
+        )
+
+crop_map_MN
+
+ggsave(crop_map_MN, file= 'other/MN_crop_specfic_counties_map.png')
+
+# ----------------------------IL -----------------------#
+# IL numbers
+IL_total_county_name <- county %>%
+  select(abbr, fips,county) %>%
+  unique() %>% 
+  filter(abbr == 'IL') %>%
+  group_by(abbr) %>%
+  summarise(n=n())
+
+IL_number <- county_list %>%
+  filter(state_alpha == 'IL') %>%
+  group_by(crop) %>%
+  summarise(p_shec_n = n()) %>%
+  mutate(p_shec_percent = p_shec_n/IL_total_county_name$n) %>%
+  arrange(desc(p_shec_n))
+
+IL_crop_order <- IL_number$crop
+
+# get the focused state boundaries
+IL_states <- us_map(regions = 'states', include = 'IL')
+
+IL_county <- us_map(regions = 'counties', include = 'IL')
+
+IL_crop_counties <- crop_counties_both %>%
+  filter(state_alpha == 'IL') %>%
+  mutate(crop = factor(crop, levels = IL_crop_order))
+
+crop_map_IL <- ggplot() +
+  geom_polygon(data = IL_crop_counties, aes(x =x, y=y, group = group, fill = legend_group),alpha = 0.9, color = NA) +
+  geom_polygon(data = IL_county, aes(x = x, y = y, group = group), fill = NA, color = 'gray40', linewidth = 0.1) +
+  geom_polygon(data = IL_states, aes(x = x, y = y, group = group), fill = NA, color = 'black', linewidth =0.5) +
+  #geom_polygon(data = highlight_states, aes(x = x, y = y, group = group, color = legend_group), fill = NA, size =1) +
+  scale_fill_manual(values = c("P-SHEC covered counties" = "forestgreen"),
+                    guide = guide_legend(order = 1)) + 
+  #scale_color_manual(values = c("Joyce Foundation's priority states" = 'magenta' ), # color:"darkmagenta", 'red'
+  #                 guide = guide_legend(order = 2)) + 
+  facet_wrap(~crop,nrow = 1)+
+  coord_equal() +
+  theme_void() +
+  theme(#plot.title = element_text(size = 24, hjust = 0.3, face = 'bold'),
+        strip.text = element_text(margin = margin(b = 0),size = 16,face = 'bold'),
+        legend.position = 'bottom',   
+        #legend.justification = c(0, 0),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 15)
+        )
+
+crop_map_IL
+
+ggsave(crop_map_IL, file= 'other/IL_crop_specfic_counties_map.png')
+
+
+#------northeast_states <- c("ME","NH","VT","MA","RI","CT","NY","NJ","PA")----#
+
+# NE numbers
+NE_total_county_name <- county %>%
+  select(abbr, fips,county) %>%
+  unique() %>% 
+  filter(abbr %in% c("ME","NH","VT","MA","RI","CT","NY","NJ","PA")) %>%
+  group_by(abbr) %>%
+  summarise(n=n())
+
+NE_number <- county_list %>%
+  filter(state_alpha %in% c("ME","NH","VT","MA","RI","CT","NY","NJ","PA")) %>%
+  group_by(crop,state_alpha) %>%
+  summarise(p_shec_n = n()) %>%
+  left_join(NE_total_county_name, by = c( 'state_alpha'='abbr')) %>%
+  group_by(crop,state_alpha) %>%
+  mutate(p_shec_percent = p_shec_n/n) %>%
+  arrange(state_alpha,desc(p_shec_n))
+
+NE_crop_order <- NE_number %>%
+  group_by(crop) %>%
+  summarise(crop_total_n = sum(p_shec_n)) %>%
+  arrange(desc(crop_total_n))
+
+NE_crop_order <- NE_crop_order$crop
+
+# get the focused state boundaries
+NE_states <- us_map(regions = 'states', include = c("ME","NH","VT","MA","RI","CT","NY","NJ","PA"))
+
+NE_county <- us_map(regions = 'counties', include = c("ME","NH","VT","MA","RI","CT","NY","NJ","PA"))
+
+NE_crop_counties <- crop_counties_both %>%
+  filter(state_alpha %in% c("ME","NH","VT","MA","RI","CT","NY","NJ","PA")) %>%
+  mutate(crop = factor(crop, levels = NE_crop_order))
+
+crop_map_NE <- ggplot() +
+  geom_polygon(data = NE_crop_counties, aes(x =x, y=y, group = group, fill = legend_group),alpha = 0.9, color = NA) +
+  geom_polygon(data = NE_county, aes(x = x, y = y, group = group), fill = NA, color = 'gray40', linewidth = 0.1) +
+  geom_polygon(data = NE_states, aes(x = x, y = y, group = group), fill = NA, color = 'black', linewidth =0.5) +
+  #geom_polygon(data = highlight_states, aes(x = x, y = y, group = group, color = legend_group), fill = NA, size =1) +
+  scale_fill_manual(values = c("P-SHEC covered counties" = "forestgreen"),
+                    guide = guide_legend(order = 1)) + 
+  #scale_color_manual(values = c("Joyce Foundation's priority states" = 'magenta' ), # color:"darkmagenta", 'red'
+  #                 guide = guide_legend(order = 2)) + 
+  facet_wrap(~crop,nrow = 2)+
+  coord_equal() +
+  theme_void() +
+  theme(#plot.title = element_text(size = 24, hjust = 0.3, face = 'bold'),
+        strip.text = element_text(margin = margin(b = 0),size = 16,face = 'bold'),
+        legend.position = 'bottom',   
+        #legend.justification = c(0, 0),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 15)
+        )
+
+crop_map_NE
+
+ggsave(crop_map_NE, file= 'other/Northeast_crop_specfic_counties_map.png')
 
 ```
