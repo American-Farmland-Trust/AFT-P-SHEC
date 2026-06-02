@@ -217,6 +217,8 @@ gc()
 ```{r counties}
 
 # Define the output directory
+input_dir  <- "gSSURGO/all_counties_gssurgo/"
+temp_dir   <- "gSSURGO/county_gssurgo_temp_chunks/"
 output_dir <- 'gSSURGO/county_gssurgo_gdbs/'
 
 # Ensure the directory exists before the loop starts
@@ -224,20 +226,116 @@ if (!dir.exists(output_dir)) {
   dir.create(output_dir, recursive = TRUE)
 }
 
+if (!dir.exists(temp_dir)) {
+  dir.create(temp_dir, recursive = TRUE)
+}
+
 #list gssurgo files in the folder
 file_list <- list.files(path = 'gSSURGO/all_counties_gssurgo/','rds',full.names = TRUE)
 
-for (i in 1:length(file_list)) {
+#for (i in 1:length(file_list)) {
 
-all_counties_gssurgo <- read_rds(file = paste0("gSSURGO/all_counties_gssurgo/all_counties_gssurgo_part",i,".rds"))
+#all_counties_gssurgo <- read_rds(file = paste0("gSSURGO/all_counties_gssurgo/all_counties_gssurgo_part",i,".rds"))
 
-mclapply(mc.cores = 4, unique(all_counties_gssurgo$GEOID), FUN = function(x){
-  write_rds(all_counties_gssurgo[all_counties_gssurgo$GEOID == x,], 
-            file = paste("gSSURGO/county_gssurgo_gdbs/GEOID_", x, ".rds", sep = ""))
+# Error note: this code can generate partial files because write.rds is within the loop
+#mclapply(mc.cores = 4, unique(all_counties_gssurgo$GEOID), FUN = function(x){
+#  write_rds(all_counties_gssurgo[all_counties_gssurgo$GEOID == x,], 
+#            file = paste("gSSURGO/county_gssurgo_gdbs/GEOID_", x, ".rds", sep = ""))
+#})
+
+target_crs <- sf::st_crs(5070)
+
+# -----------------------------
+# Step 1: Split each part file into temporary GEOID chunks
+# -----------------------------
+
+parallel::mclapply(seq_along(file_list), mc.cores = 4, function(i) {
+  
+  message("Processing part ", i)
+  
+  all_counties_gssurgo <- readr::read_rds(file_list[i]) %>%
+    dplyr::mutate(GEOID = as.character(GEOID))
+  
+  if (inherits(all_counties_gssurgo, "sf")) {
+    sf::st_crs(all_counties_gssurgo) <- target_crs
+  }
+  
+  county_list <- split(all_counties_gssurgo, all_counties_gssurgo$GEOID)
+  
+  purrr::iwalk(county_list, function(df, geoid) {
+    readr::write_rds(
+      df,
+      file.path(temp_dir, paste0("GEOID_", geoid, "_part", i, ".rds"))
+    )
+  })
+  
+  rm(all_counties_gssurgo, county_list)
+  gc()
+  
+  NULL
 })
 
-gc()
+# -----------------------------
+# Step 2: Combine temporary chunks by GEOID
+# -----------------------------
 
-}
+chunk_files <- list.files(
+  path = temp_dir,
+  pattern = "\\.rds$",
+  full.names = TRUE
+)
+
+geoids <- stringr::str_extract(
+  basename(chunk_files),
+  "(?<=GEOID_)\\d+"
+)
+
+unique_geoids <- unique(geoids)
+
+parallel::mclapply(unique_geoids, mc.cores = 4, function(geoid) {
+  
+  message("Combining GEOID ", geoid)
+  
+  geoid_files <- chunk_files[geoids == geoid]
+  
+  county_data_list <- lapply(geoid_files, function(f) {
+    
+    x <- readr::read_rds(f)
+    
+    # Make sure it is sf
+    x <- sf::st_as_sf(x)
+    
+    # Force CRS metadata
+    sf::st_crs(x) <- target_crs
+    
+    # Detect active geometry column
+    geom_col <- attr(x, "sf_column")
+    
+    # Rename geometry column to a standard name
+    if (!identical(geom_col, "geometry")) {
+      names(x)[names(x) == geom_col] <- "geometry"
+      sf::st_geometry(x) <- "geometry"
+    }
+    
+    sf::st_crs(x) <- target_crs
+    
+    x
+  })
+  
+  # Use base rbind for sf objects
+  county_data <- do.call(rbind, county_data_list)
+  
+  sf::st_crs(county_data) <- target_crs
+  
+  readr::write_rds(
+    county_data,
+    file.path(output_dir, paste0("GEOID_", geoid, ".rds"))
+  )
+  
+  rm(county_data, county_data_list)
+  gc()
+  
+  NULL
+})
 
 ```
