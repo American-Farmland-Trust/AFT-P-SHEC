@@ -249,22 +249,22 @@ saveRDS(SOM_1, file='../RShiny_General_Info_Data/SOM_County_Base_Update_1.rds')
 
 # check dataframe differences: before SOM 10% filter vs. after
 # choose the join key
-key_cols <- c("fipsint","Crop","State","state_name","County")
+#key_cols <- c("fipsint","Crop","State","state_name","County")
 
-A <- SOM_1
-B <- SOM_County_Base_Update
+#A <- SOM_1
+#B <- SOM_County_Base_Update
 
 # 0) quick sizes
-cat("Rows A:", nrow(A), " Rows B:", nrow(B), "\n")
+#cat("Rows A:", nrow(A), " Rows B:", nrow(B), "\n")
 
 # 1) Keys-only comparison (distinct by the key)
-A_keys <- A %>% distinct(across(all_of(key_cols)))
-B_keys <- B %>% distinct(across(all_of(key_cols)))
+#A_keys <- A %>% distinct(across(all_of(key_cols)))
+#B_keys <- B %>% distinct(across(all_of(key_cols)))
 
 # these are the rows filtered out 
-only_in_B_keys <- anti_join(B_keys, A_keys, by = key_cols)
+#only_in_B_keys <- anti_join(B_keys, A_keys, by = key_cols)
 
-saveRDS(only_in_B_keys, file = '../RShiny_General_Info_Data/Rows_removed_in_SOM_County_Base_Update_1.rds')
+#saveRDS(only_in_B_keys, file = '../RShiny_General_Info_Data/Rows_removed_in_SOM_County_Base_Update_1.rds')
 
 ```
 
