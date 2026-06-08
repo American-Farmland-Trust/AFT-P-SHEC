@@ -145,3 +145,44 @@ crop_list <- c('SUGARBEETS','PEANUTS','SORGHUM','TOBACCO','OATS','BARLEY','COTTO
 
 # Loop through each crop and each management type
 lapply(crop_list, combine_function)
+
+# combine all crops for Rshiny use
+library(dplyr)
+library(purrr)
+library(rlang)
+
+crop_yield_update <- map_dfr(crop_list, function(crop) {
+  
+  dat <- readRDS(
+    file = paste0("results/yield_predictions/", crop, "_Pred_Normal.rds")
+  )
+  
+  # Identify crop-specific prediction column and unit
+  if ("pred_yield_lb_acre" %in% names(dat)) {
+    pred_col <- "pred_yield_lb_acre"
+    unit <- "lb/ac"
+  } else if ("pred_yield_ton_acre" %in% names(dat)) {
+    pred_col <- "pred_yield_ton_acre"
+    unit <- "ton/ac"
+  } else if ("pred_yield_bu_acre" %in% names(dat)) {
+    pred_col <- "pred_yield_bu_acre"
+    unit <- "bu/ac"
+  } else {
+    stop("No recognized predicted yield column found for crop: ", crop)
+  }
+  
+  dat %>%
+    mutate(
+      Crop = tolower(crop),
+      pred_yield = .data[[pred_col]],
+      unit = unit
+    ) %>%
+    select(-any_of(c(
+      "pred_yield_lb_acre",
+      "pred_yield_ton_acre",
+      "pred_yield_bu_acre"
+    )))
+}) %>%
+  select(state_alpha, county_name, GEOID, ssurgo_om_mean, pred_yield, Crop, unit)
+
+save(crop_yield_update, file = '../RShiny_General_Info_Data/crop_yield_est.rds')
