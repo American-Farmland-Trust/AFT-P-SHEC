@@ -3,8 +3,12 @@ library(readxl)
 library(dplyr)
 library(stringr)
 
-COMET_Base<-read_excel("C:\\Users\\ChellieMaples\\OneDrive - American Farmland Trust\\Desktop\\Desktop Excel\\US_COMET-Planner_data_June_2023.xlsx", "All States Filtered")
-BD_Base<-read_excel("C:\\Users\\ChellieMaples\\OneDrive - American Farmland Trust\\Desktop\\Desktop Excel\\bulk_density_by_county_gssurgo_2024_CM Copy.xlsx")
+#COMET_Base<-read_excel("C:\\Users\\ChellieMaples\\OneDrive - American Farmland Trust\\Desktop\\Desktop Excel\\US_COMET-Planner_data_June_2023.xlsx", "All States Filtered")
+COMET_Base<-read_excel("data/raw_data/US_COMET-Planner_data_June_2023.xlsx", "All States Filtered")
+#BD_Base<-read_excel("C:\\Users\\ChellieMaples\\OneDrive - American Farmland Trust\\Desktop\\Desktop Excel\\bulk_density_by_county_gssurgo_2024_CM Copy.xlsx")
+BD_Base<-read.csv("data/intermediate_data/bulk_density_by_county_gssurgo_2024.csv")
+BD_Base <- BD_Base %>%
+  mutate(fipsint = str_pad(GEOID, width = 5, side = "left", pad = "0"))
 #Assumes 30 cm depth for calculation 
 #bulk density will vary by county
 COMET_Base_Final <- COMET_Base[, c("state", "county", "fipsint", "cps_name", "planner_implementation", "soil_carbon_co2")]
@@ -31,8 +35,9 @@ COMET_Base_Final <- COMET_Base_Final %>%
     MG_SOM_MG_Soil = MG_C_MG_Soil_Yr/0.58,
     '%SOM/yr' =  MG_SOM_MG_Soil*100
     
-  )
+  ) %>%
+  mutate(county = toupper(county))
 
 
 
-saveRDS(COMET_Base_Final, "COMET_Base_Final.rds")
+saveRDS(COMET_Base_Final, "../RShiny_General_Info_Data/COMET_Base_Final.rds")
