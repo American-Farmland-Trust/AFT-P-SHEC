@@ -59,12 +59,12 @@ yield_list_long <- yield_list %>%
   filter(value == 1) %>%
   rename(yield_prediction = value) 
 
-# n = 5248
+# n = 5248 --> 5258
 
 drought_list <- all_crop_county %>%
   mutate(drought_prediction = 1)
 
-# n = 4066
+# n = 4066 --> 4073
 
 final_county_list <- yield_list_long %>%
   left_join(drought_list, by = c('state_alpha','GEOID','crop'))
@@ -84,3 +84,4 @@ final_county_list_1 <- final_county_list %>%
   dplyr::select(state_alpha,state_name, GEOID, county, crop, yield_prediction,drought_prediction)
 
 saveRDS(final_county_list_1, file = 'data/intermediate_data/Final_all_predictions_state_county_list_2000_2023.rds')
+#saveRDS(new_only, file = 'data/intermediate_data/newly_added_data_June_2026_update.rds')
