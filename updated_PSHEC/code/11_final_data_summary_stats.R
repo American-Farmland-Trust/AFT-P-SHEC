@@ -84,4 +84,5 @@ final_county_list_1 <- final_county_list %>%
   dplyr::select(state_alpha,state_name, GEOID, county, crop, yield_prediction,drought_prediction)
 
 saveRDS(final_county_list_1, file = 'data/intermediate_data/Final_all_predictions_state_county_list_2000_2023.rds')
+saveRDS(final_county_list_1, file = '../RShiny_General_Info_Data/state_county_data.rds')
 #saveRDS(new_only, file = 'data/intermediate_data/newly_added_data_June_2026_update.rds')
