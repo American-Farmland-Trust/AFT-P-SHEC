@@ -185,4 +185,4 @@ crop_yield_update <- map_dfr(crop_list, function(crop) {
 }) %>%
   select(state_alpha, county_name, GEOID, ssurgo_om_mean, pred_yield, Crop, unit)
 
-save(crop_yield_update, file = '../RShiny_General_Info_Data/crop_yield_est.rds')
+saveRDS(crop_yield_update, file = '../RShiny_General_Info_Data/crop_yield_est.rds')
