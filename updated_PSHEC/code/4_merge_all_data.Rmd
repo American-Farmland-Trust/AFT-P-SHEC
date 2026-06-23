@@ -146,9 +146,9 @@ rds_files <- list.files(path = folder_path, pattern = "*.rds", full.names = TRUE
 # Create a container to store data from each file
 lst <- list()
 
-# Loop through each CSV file
+# Loop through each file
 for (file in rds_files) {
-  # Read the CSV file
+  # Read the file
   data <- read_rds(file)
   
   # Ensure the 'GEOID' column is a string with 5 characters, left-padded with zeros
@@ -185,7 +185,7 @@ all_crop_county_wide_order <- all_crop_county_wide %>%
   # Order by crop_sum (lowest to highest)
   arrange(desc(crop_sum))
 
-write.csv(all_crop_county_wide_order, file = 'data/intermediate/all_10_crops_merged_data_county_list_ordered_2000_2023.csv',
+write.csv(all_crop_county_wide_order, file = 'data/intermediate_data/all_10_crops_merged_data_county_list_ordered_2000_2023.csv',
           row.names = FALSE)
 
 
@@ -198,7 +198,7 @@ Extract baseline SOM
 # Define the folder containing the rds files
 folder_path <- "data/merged_data/"
 
-# Get a list of all CSV files in the folder
+# Get a list of all files in the folder
 rds_files <- list.files(path = folder_path, pattern = "*.rds", full.names = TRUE)
 
 # Create a container to store data from each file
@@ -238,33 +238,33 @@ SOM_1 <- all_crop_county %>%
   dplyr::select(GEOID,ssurgo_om_mean, crop, state, state_name,county) %>%
   mutate(county = toupper(county),
          crop = str_to_title(crop)) %>%
-  mutate(crop = case_when(crop == 'Sugarbeets' ~ 'Sugar Beets', TRUE ~ crop)) %>%
+  #mutate(crop = case_when(crop == 'Sugarbeets' ~ 'Sugar Beets', TRUE ~ crop)) %>%
   rename(fipsint = GEOID, 
          base_SOM = ssurgo_om_mean,
          Crop = crop,
          State = state,
          County = county)
 
-saveRDS(SOM_1, file='../RShiny_General_Info_Data/SOM_County_Base_Update_1.rds')
+saveRDS(SOM_1, file='../RShiny_General_Info_Data/gssurgo_base.rds')
 
 # check dataframe differences: before SOM 10% filter vs. after
 # choose the join key
-key_cols <- c("fipsint","Crop","State","state_name","County")
+#key_cols <- c("fipsint","Crop","State","state_name","County")
 
-A <- SOM_1
-B <- SOM_County_Base_Update
+#A <- SOM_1
+#B <- SOM_County_Base_Update
 
 # 0) quick sizes
-cat("Rows A:", nrow(A), " Rows B:", nrow(B), "\n")
+#cat("Rows A:", nrow(A), " Rows B:", nrow(B), "\n")
 
 # 1) Keys-only comparison (distinct by the key)
-A_keys <- A %>% distinct(across(all_of(key_cols)))
-B_keys <- B %>% distinct(across(all_of(key_cols)))
+#A_keys <- A %>% distinct(across(all_of(key_cols)))
+#B_keys <- B %>% distinct(across(all_of(key_cols)))
 
 # these are the rows filtered out 
-only_in_B_keys <- anti_join(B_keys, A_keys, by = key_cols)
+#only_in_B_keys <- anti_join(B_keys, A_keys, by = key_cols)
 
-saveRDS(only_in_B_keys, file = '../RShiny_General_Info_Data/Rows_removed_in_SOM_County_Base_Update_1.rds')
+#saveRDS(only_in_B_keys, file = '../RShiny_General_Info_Data/Rows_removed_in_SOM_County_Base_Update_1.rds')
 
 ```
 

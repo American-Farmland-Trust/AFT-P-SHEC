@@ -202,73 +202,91 @@ write_results <- function(i) {
 
 lapply(crop_name, write_results)
 
+# combine results for Rshiny use
+input_drought_dir <- 'results/drought_predictions/'
+
+crop_name <- c("CORN","COTTON","BARLEY","SORGHUM","WHEAT","SOYBEANS","PEANUTS","OATS")
+
+data_list<- lapply(crop_name, function(crop) {
+  
+  df <- readRDS(paste0(input_drought_dir,crop,'_yield_change_predictions_drought_DSCI300.rds'))
+  
+  # conditionally change column names so that all crops have the same column names
+  
+  return(df)
+  
+})
+
+data <- dplyr::bind_rows(data_list)
+
+saveRDS(data, file = '../RShiny_General_Info_Data/drought_change.rds')
 
 ##### Extract an all-county list: not run ####
 
 # Define the folder containing the drought result files
-folder_path <- "results/drought_predictions/"
+#folder_path <- "results/drought_predictions/"
 
 # Get a list of all files in the folder
-all_files <- list.files(path = folder_path, pattern = "*.rds", full.names = TRUE)
+#all_files <- list.files(path = folder_path, pattern = "*.rds", full.names = TRUE)
 
 # Create a container to store data from each file
-lst <- list()
+#lst <- list()
 
 # Loop through each file
-for (file in all_files) {
+#for (file in all_files) {
   # Read the CSV file
-  data <- readRDS(file)
+#  data <- readRDS(file)
 
   # Extract unique GEOID values
-  crop_drought_summary <- data %>%
-    dplyr::select(crop,state_alpha,GEOID) %>%
-    unique()
+#  crop_drought_summary <- data %>%
+#    dplyr::select(crop,state_alpha,GEOID) %>%
+#    unique()
   
   # Store the result in the list
-  lst[[file]] <- crop_drought_summary
-}
+#  lst[[file]] <- crop_drought_summary
+#}
 
 # Combine all the unique rows from all files
-all_crop_county <- do.call(dplyr::bind_rows,lst) %>% 
-  unique() 
+#all_crop_county <- do.call(dplyr::bind_rows,lst) %>% 
+#  unique() 
 
 # Transform the data into a wide format
-all_crop_county_wide <- all_crop_county %>%
+#all_crop_county_wide <- all_crop_county %>%
   # Create binary indicators for each crop
-  mutate(present = 1) %>%
-  pivot_wider(
-    names_from = crop,      # Create one column for each crop
-    values_from = present,  # Fill with the binary indicator (1 for presence)
-    values_fill = 0         # Fill missing values with 0
-  ) %>%
+#  mutate(present = 1) %>%
+#  pivot_wider(
+#    names_from = crop,      # Create one column for each crop
+#    values_from = present,  # Fill with the binary indicator (1 for presence)
+#    values_fill = 0         # Fill missing values with 0
+#  ) %>%
   # Create a new column with the sum of all crop columns
-  mutate(crop_sum = rowSums(across(BARLEY:WHEAT))) %>%
+#  mutate(crop_sum = rowSums(across(BARLEY:WHEAT))) %>%
   # Order by crop_sum (lowest to highest)
-  arrange(desc(crop_sum))
+#  arrange(desc(crop_sum))
 
-write.csv(all_crop_county_wide, file = 'data/intermediate_data/all_10_crops_drought_county_list_ordered_2000_2023.csv',
-          row.names = FALSE)
+#write.csv(all_crop_county_wide, file = 'data/intermediate_data/all_10_crops_drought_county_list_ordered_2000_2023.csv',
+#          row.names = FALSE)
 
 # combine yield and drought county list
 
-yield_list <- read.csv('data/intermediate_data/all_10_crops_merged_data_county_list_ordered_2000_2023.csv')
+#yield_list <- read.csv('data/intermediate_data/all_10_crops_merged_data_county_list_ordered_2000_2023.csv')
 # Ensure the 'GEOID' column is a string with 5 characters, left-padded with zeros
-yield_list$GEOID <- formatC(yield_list$GEOID, width = 5, format = 'd' ,flag = '0')
+#yield_list$GEOID <- formatC(yield_list$GEOID, width = 5, format = 'd' ,flag = '0')
 
-yield_list_long <- yield_list %>%
-  dplyr::select(-crop_sum) %>%
-  pivot_longer(names_to = 'crop',cols = c(BARLEY:WHEAT)) %>%
-  filter(value == 1) %>%
-  rename(yield_prediction = value) 
+#yield_list_long <- yield_list %>%
+#  dplyr::select(-crop_sum) %>%
+#  pivot_longer(names_to = 'crop',cols = c(BARLEY:WHEAT)) %>%
+#  filter(value == 1) %>%
+#  rename(yield_prediction = value) 
 
 # n = 5248
 
-drought_list <- all_crop_county %>%
-  mutate(drought_prediction = 1)
+#drought_list <- all_crop_county %>%
+#  mutate(drought_prediction = 1)
 
 # n = 4066
 
-final_county_list <- yield_list_long %>%
-  left_join(drought_list, by = c('state_alpha','GEOID','crop'))
+#final_county_list <- yield_list_long %>%
+#  left_join(drought_list, by = c('state_alpha','GEOID','crop'))
 
-write.csv(final_county_list, file = 'data/intermediate_data/all_crops_final_county_list_2000_2023.csv', row.names = FALSE)
+#write.csv(final_county_list, file = 'data/intermediate_data/all_crops_final_county_list_2000_2023.csv', row.names = FALSE)

@@ -13,7 +13,7 @@ library(parallel)
 #Needs to be updated: This file tells the API which counties to pull DSCI data for
 
 #------------read county list for all crops----------#
-all_crops_county <- read.csv('data/merged_data/all_10_crops_merged_data_county_list_ordered_2000_2023.csv')
+all_crops_county <- read.csv('data/intermediate_data/all_10_crops_merged_data_county_list_ordered_2000_2023.csv')
 all_crops_county$GEOID <- formatC(all_crops_county$GEOID, width = 5, format = 'd' ,flag = '0')
 
 all_counties <- unique(all_crops_county$GEOID)
@@ -46,6 +46,7 @@ data_by_county <- lapply(URL_by_county, function(x) httr::content(httr::GET(url 
 # combine the list of data
 library(purrr)
 library(dplyr)
+#library(plyr)
 
 data_by_county_2 <- data_by_county |>
   map(~ mutate(., FIPS = as.character(FIPS))) |>
@@ -53,7 +54,7 @@ data_by_county_2 <- data_by_county |>
 
 
 #ldply command is command that, for each element of a list, applies a function, then combined result into a data frame
-data_by_county_2 <- ldply(data_by_county, function(x) ldply(x, function(x) data.frame(t(unlist(x)))))
+#data_by_county_2 <- ldply(data_by_county, function(x) ldply(x, function(x) data.frame(t(unlist(x)))))
 
 # Save the data
 saveRDS(data_by_county_2, file = "data/intermediate_data/DSCI_all_crop_drought_by_county_1999_2023.rds")
@@ -87,15 +88,15 @@ calc_dsci <- function(crop_name) {
   temp = data_by_county_2 %>%
     inner_join(calendar, by = c('State'='state_alpha')) %>%
     # filter by crop counties
-    filter(FIPS %in% all_crops_county$GEOID[all_crops_county[[crop_name]]==1]) %>%
-    mutate(Date = make_date(Year, Month, Day),
+    dplyr::filter(FIPS %in% all_crops_county$GEOID[all_crops_county[[crop_name]]==1]) %>%
+    dplyr::mutate(Date = make_date(Year, Month, Day),
            yday = yday(Date),
            Year = as.integer(Year))
   
   # Case 1: Plant and harvest occur within the same year
   same_year_mean <- temp %>%
-    group_by(FIPS,State, Year) %>%
-    filter(planted <= mature & Year > 1999) %>% # don't include same year crop for 1999
+    dplyr::group_by(FIPS,State, Year) %>%
+    dplyr::filter(planted <= mature & Year > 1999) %>% # don't include same year crop for 1999
     dplyr::group_by(Year, FIPS, State, County) %>%
     dplyr::summarise(DSCI.mean = 
                        mean(DSCI[yday >= planted & yday <= mature], na.rm = TRUE), .groups = 'drop') %>%
@@ -103,13 +104,13 @@ calc_dsci <- function(crop_name) {
   
   # Case 2: Plant occurs in previous year, harvest in current year
   cross_year <- temp %>%
-    group_by(FIPS,State, Year) %>%
-    filter(planted > mature)
+    dplyr::group_by(FIPS,State, Year) %>%
+    dplyr::filter(planted > mature)
   
   cross_year_mean <- cross_year %>%
     # Calculate contributions from previous and current years
     dplyr::group_by(Year, FIPS, State, County) %>%
-    summarise(
+    dplyr::summarise(
       prev_sum = sum(
         if_else(yday >= planted, DSCI, 0),  # From planting to end of prev year
         na.rm = TRUE
@@ -125,17 +126,17 @@ calc_dsci <- function(crop_name) {
       current_n = sum(if_else(yday <= mature, 1, 0), na.rm = TRUE) # calculate the number of rows (weeks)
       
     ) %>%
-    group_by(FIPS, State) %>%
-    arrange(Year) %>% # Ensure data is ordered by year within each group
-    mutate(
+    dplyr::group_by(FIPS, State) %>%
+    dplyr::arrange(Year) %>% # Ensure data is ordered by year within each group
+    dplyr::mutate(
       # For each year, add the previous year's sum/count (using lag)
       total_sum = lag(prev_sum, default = 0) + current_sum,  # Previous year's prev_sum + current_sum
       total_n = lag(prev_n, default = 0) + current_n, # total number of weeks
       DSCI.mean = total_sum/total_n
     ) %>%
-    ungroup() %>%
+    dplyr::ungroup() %>%
     dplyr::select(-c(prev_sum,current_sum, prev_n, current_n,total_sum, total_n)) %>%
-    filter(Year != 1999) %>% # don't include 1999
+    dplyr::filter(Year != 1999) %>% # don't include 1999
     dplyr::rename("year" = Year, 'GEOID' = FIPS, 'state_alpha' = State) 
   
   # Combine results and add crop identifier
